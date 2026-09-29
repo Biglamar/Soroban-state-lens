@@ -26,6 +26,7 @@ export default function NetworkSelector() {
   const [isOpen, setIsOpen] = useState(false)
   const [showCustomInput, setShowCustomInput] = useState(false)
   const [customRpcUrl, setCustomRpcUrl] = useState('')
+  const [customNetworkPassphrase, setCustomNetworkPassphrase] = useState('')
   const [validationError, setValidationError] = useState('')
   const [testStatus, setTestStatus] = useState<
     'idle' | 'loading' | 'success' | 'error'
@@ -47,13 +48,15 @@ export default function NetworkSelector() {
     // If currently on custom network and we have a last custom URL, sync it
     if (networkConfig.networkId === 'custom' && lastCustomUrl) {
       setCustomRpcUrl(lastCustomUrl)
+      setCustomNetworkPassphrase(networkConfig.networkPassphrase)
       setShowCustomInput(true)
     } else if (networkConfig.networkId === 'custom') {
       // If custom but no last URL, use current config URL
       setCustomRpcUrl(networkConfig.rpcUrl || '')
+      setCustomNetworkPassphrase(networkConfig.networkPassphrase || '')
       setShowCustomInput(true)
     }
-  }, [networkConfig.networkId, lastCustomUrl, networkConfig.rpcUrl])
+  }, [networkConfig.networkId, lastCustomUrl])
 
   // Auto-focus the input whenever the custom panel becomes visible
   useEffect(() => {
@@ -89,12 +92,17 @@ export default function NetworkSelector() {
     } else {
       // Custom: restore last custom URL or set up for new input
       const urlToUse = lastCustomUrl || networkConfig.rpcUrl || ''
+      const passphraseToUse =
+        networkConfig.networkId === 'custom'
+          ? networkConfig.networkPassphrase
+          : ''
       setNetworkConfig({
         networkId: 'custom',
-        networkPassphrase: '',
+        networkPassphrase: passphraseToUse,
         rpcUrl: urlToUse,
       })
       setCustomRpcUrl(urlToUse) // ← preserve any previously typed/saved URL
+      setCustomNetworkPassphrase(passphraseToUse)
       setShowCustomInput(true) // ← show the input panel
       setIsOpen(false) // ← close the dropdown list
     }
@@ -110,12 +118,17 @@ export default function NetworkSelector() {
   }
 
   const handleApplyCustomUrl = () => {
+    if (!customNetworkPassphrase.trim()) {
+      setValidationError('')
+      return
+    }
+
     const validation = validateRpcUrl(customRpcUrl)
     if (validation.isValid) {
       setNetworkConfig({
         networkId: 'custom',
         rpcUrl: customRpcUrl.trim(),
-        networkPassphrase: 'Custom Network',
+        networkPassphrase: customNetworkPassphrase.trim(),
       })
       setLastCustomUrl(customRpcUrl.trim())
       setShowCustomInput(false)
@@ -276,6 +289,34 @@ export default function NetworkSelector() {
                 aria-describedby={validationError ? 'rpc-error' : undefined}
               />
 
+              <input
+                type="text"
+                value={customNetworkPassphrase}
+                onChange={(e) => setCustomNetworkPassphrase(e.target.value)}
+                placeholder="Network passphrase"
+                className={`w-full px-3 py-2 bg-background-dark border rounded-md text-sm text-white placeholder-text-muted transition-colors ${
+                  customNetworkPassphrase.trim()
+                    ? 'border-border-dark focus:border-primary'
+                    : 'border-red-500 focus:border-red-500'
+                } focus:outline-none focus:ring-1 focus:ring-primary/20`}
+                aria-label="Custom network passphrase"
+                aria-invalid={!customNetworkPassphrase.trim()}
+                aria-describedby={
+                  !customNetworkPassphrase.trim()
+                    ? 'network-passphrase-error'
+                    : undefined
+                }
+              />
+
+              {!customNetworkPassphrase.trim() && (
+                <p
+                  id="network-passphrase-error"
+                  className="text-xs text-red-400"
+                >
+                  Network passphrase is required
+                </p>
+              )}
+
               {validationError && (
                 <p
                   id="rpc-error"
@@ -339,7 +380,11 @@ export default function NetworkSelector() {
                 <button
                   type="button"
                   onClick={handleApplyCustomUrl}
-                  disabled={!customRpcUrl.trim() || !!validationError}
+                  disabled={
+                    !customRpcUrl.trim() ||
+                    !customNetworkPassphrase.trim() ||
+                    !!validationError
+                  }
                   className="px-3 py-1.5 text-sm bg-primary text-white rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Apply
