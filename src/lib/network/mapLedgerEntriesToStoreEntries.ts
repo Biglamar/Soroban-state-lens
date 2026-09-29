@@ -1,3 +1,4 @@
+import { xdr } from '@stellar/stellar-sdk'
 import { makeLedgerEntryKey } from '../storage/makeLedgerEntryKey'
 import type { LedgerEntry as RpcLedgerEntry } from './getLedgerEntries'
 import type { LedgerEntry as StoreLedgerEntry } from '../../store/types'
@@ -8,6 +9,48 @@ interface MapLedgerEntriesParams {
   decodedValuesByKey?: Record<string, unknown>
 }
 
+function inferLedgerEntryType(key: string): StoreLedgerEntry['type'] {
+  const normalized = key.trim().toLowerCase()
+  const tokens = normalized.split('::').map((segment) => segment.trim())
+  const haystack = tokens.join('::')
+
+  if (haystack.includes('contractcode') || haystack.includes('contract_code')) {
+    return 'ContractCode'
+  }
+  if (haystack.includes('contractdata') || haystack.includes('contract_data')) {
+    return 'ContractData'
+  }
+  if (haystack.includes('account')) {
+    return 'Account'
+  }
+  if (haystack.includes('trustline')) {
+    return 'Trustline'
+  }
+
+  return 'Other'
+}
+
+function decodeDurability(key: string): StoreLedgerEntry['durability'] {
+  try {
+    const ledgerKey = xdr.LedgerKey.fromXDR(key, 'base64')
+    if (ledgerKey.switch().name !== 'contractData') {
+      return undefined
+    }
+
+    const durability = ledgerKey.contractData().durability().name
+    if (durability === 'persistent') {
+      return 'Persistent'
+    }
+    if (durability === 'temporary') {
+      return 'Temporary'
+    }
+  } catch {
+    return undefined
+  }
+
+  return undefined
+}
+
 /**
  * Maps raw RPC ledger-entry payloads into the canonical store entry shape.
  */
@@ -15,17 +58,40 @@ export function mapLedgerEntriesToStoreEntries(
   params: MapLedgerEntriesParams,
 ): Array<StoreLedgerEntry> {
   const { contractId, entries, decodedValuesByKey = {} } = params
+  return entries.map((entry) => {
+    const type = inferLedgerEntryType(entry.key)
+    const durability = decodeDurability(entry.key)
+    const last = entry.lastModifiedLedgerSeq
+    const live = entry.liveUntilLedgerSeq
 
-  return entries.map((entry) => ({
-    key: makeLedgerEntryKey(contractId, 'Other', entry.key),
-    contractId,
-    type: 'Other',
-    value:
-      decodedValuesByKey[entry.key] !== undefined
-        ? decodedValuesByKey[entry.key]
-        : entry.xdr,
-    lastModifiedLedger: entry.lastModifiedLedgerSeq ?? 0,
-    expirationLedger: entry.liveUntilLedgerSeq,
-    rawXdr: entry.xdr,
-  }))
+    const lastModifiedLedger =
+      typeof last === 'number' &&
+      Number.isFinite(last) &&
+      last >= 0 &&
+      Number.isInteger(last)
+        ? last
+        : 0
+
+    const expirationLedger =
+      typeof live === 'number' &&
+      Number.isFinite(live) &&
+      live >= 0 &&
+      Number.isInteger(live)
+        ? live
+        : undefined
+
+    return {
+      key: makeLedgerEntryKey(contractId, type, entry.key),
+      contractId,
+      type,
+      ...(durability ? { durability } : {}),
+      value:
+        decodedValuesByKey[entry.key] !== undefined
+          ? decodedValuesByKey[entry.key]
+          : entry.xdr,
+      lastModifiedLedger,
+      expirationLedger,
+      rawXdr: entry.xdr,
+    }
+  })
 }

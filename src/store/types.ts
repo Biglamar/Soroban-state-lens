@@ -10,17 +10,6 @@ export enum ConnectionStatus {
   ERROR = 'error',
 }
 
-// Display preferences
-export enum ByteDisplayMode {
-  HEX = 'hex',
-  BASE64 = 'base64',
-}
-
-export enum BigIntDisplayMode {
-  RAW = 'raw',
-  FORMATTED = 'formatted',
-}
-
 // Network configuration
 export interface NetworkConfig {
   networkId: string
@@ -65,6 +54,8 @@ export interface NetworkConfigSlice {
 // Ledger data slice
 export interface LedgerDataSlice {
   ledgerData: LedgerDataMap
+  currentLedgerSequence: number
+  setCurrentLedgerSequence: (sequence: number) => void
   upsertLedgerEntry: (entry: LedgerEntry) => void
   upsertLedgerEntries: (entries: Array<LedgerEntry>) => void
   removeLedgerEntry: (key: LedgerKey) => void
@@ -89,6 +80,7 @@ export interface ContractSnapshot {
   id: string
   contractId: string
   timestamp: number
+  ledgerSequence: number
   ledgerData: Record<string, LedgerEntry>
   label?: string
 }
@@ -99,7 +91,9 @@ export interface SnapshotSlice {
   addSnapshot: (
     contractId: string,
     entries: Record<string, LedgerEntry>,
+    ledgerSequence: number,
     label?: string,
+    maxSnapshots?: number,
   ) => void
   getSnapshots: (contractId: string) => Array<ContractSnapshot>
   removeSnapshot: (contractId: string, snapshotId: string) => void
@@ -127,6 +121,7 @@ export enum ContractLoadStatus {
 export interface ContractLoadSlice {
   contractLoadStatus: ContractLoadStatus
   contractLoadError: string | null
+  contractLoadAttemptCount: number | null
   setContractLoadStatus: (status: ContractLoadStatus) => void
   setContractLoadError: (message: string | null) => void
   resetContractLoadState: () => void
@@ -149,10 +144,36 @@ export interface WatchlistSlice {
   clearWatchlist: (contractId: string) => void
 }
 
-// Preferences slice
-export interface PreferencesSlice {
+// Contract spec slice – parsed schema data keyed by contract ID
+export interface ContractSpecSlice {
+  contractSpecs: Record<string, unknown>
+  setContractSpec: (contractId: string, spec: unknown) => void
+  getContractSpec: (contractId: string) => unknown
+  clearContractSpec: (contractId: string) => void
+}
+
+// Display preferences enums
+export enum ByteDisplayMode {
+  HEX = 'hex',
+  BASE64 = 'base64',
+  UTF8 = 'utf8',
+}
+
+export enum BigIntDisplayMode {
+  DECIMAL = 'decimal',
+  HEX = 'hex',
+  SCIENTIFIC = 'scientific',
+}
+
+// Display preferences
+export interface DisplayPreferences {
   byteDisplayMode: ByteDisplayMode
   bigIntDisplayMode: BigIntDisplayMode
+}
+
+// Preferences slice
+export interface PreferencesSlice {
+  preferences: DisplayPreferences
   setByteDisplayMode: (mode: ByteDisplayMode) => void
   setBigIntDisplayMode: (mode: BigIntDisplayMode) => void
   resetPreferences: () => void
@@ -167,6 +188,7 @@ export interface LensStore
     SnapshotSlice,
     ContractSlice,
     ContractLoadSlice,
+    ContractSpecSlice,
     PreferencesSlice,
     WatchlistSlice {}
 
@@ -190,4 +212,12 @@ export const DEFAULT_NETWORKS: Record<string, NetworkConfig> = {
     rpcUrl: 'https://soroban.stellar.org',
     horizonUrl: 'https://horizon.stellar.org',
   },
+}
+
+/**
+ * Default display preferences
+ */
+export const DEFAULT_PREFERENCES: DisplayPreferences = {
+  byteDisplayMode: ByteDisplayMode.HEX,
+  bigIntDisplayMode: BigIntDisplayMode.DECIMAL,
 }
