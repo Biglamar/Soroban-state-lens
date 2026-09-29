@@ -25,6 +25,14 @@ export interface DiscoveryInputState {
   transaction: string
   arguments: string
 }
+
+export function hasUnsavedDiscoveryInput(
+  inputState: DiscoveryInputState,
+): boolean {
+  return (
+    inputState.transaction.trim() !== '' || inputState.arguments.trim() !== ''
+  )
+}
 export function dedupeDiscoveryKeys(
   keys: Array<DiscoveredKey> | undefined,
 ): Array<DiscoveredKey> {
@@ -218,10 +226,7 @@ export function DiscoveryRoute() {
   )
   const isSubmitting = state.status === 'loading'
 
-  const hasUnsavedInput =
-    functionName.trim() !== '' ||
-    inputState.transaction.trim() !== '' ||
-    inputState.arguments.trim() !== ''
+  const hasUnsavedInput = hasUnsavedDiscoveryInput(inputState)
 
   useEffect(() => {
     if (!hasUnsavedInput) return
@@ -313,6 +318,7 @@ export function DiscoveryRoute() {
           requestedKeyCount: keys.length,
         }),
       )
+      setInputState({ transaction: '', arguments: '' })
     } finally {
       if (!controller.signal.aborted) {
         activeRequest.current = null

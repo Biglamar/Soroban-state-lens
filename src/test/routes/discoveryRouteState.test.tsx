@@ -91,32 +91,32 @@ describe('discovery route state', () => {
     ).toHaveLength(1)
   })
 
-  it('detects edits in discovery transaction or argument drafts', () => {
+  it('detects edits in discovery transaction and argument drafts', () => {
     expect(
       hasDiscoveryDraftEdits({
-        transactionXdr: '',
+        transactionDraft: '',
         argumentDraft: '',
       }),
     ).toBe(false)
 
     expect(
       hasDiscoveryDraftEdits({
-        transactionXdr: '  ',
+        transactionDraft: '   ',
         argumentDraft: '\n',
       }),
     ).toBe(false)
 
     expect(
       hasDiscoveryDraftEdits({
-        transactionXdr: 'AAAA',
+        transactionDraft: 'invoke',
         argumentDraft: '',
       }),
     ).toBe(true)
 
     expect(
       hasDiscoveryDraftEdits({
-        transactionXdr: '',
-        argumentDraft: '{"x":1}',
+        transactionDraft: '',
+        argumentDraft: '["abc"]',
       }),
     ).toBe(true)
   })

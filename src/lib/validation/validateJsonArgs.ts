@@ -5,6 +5,36 @@ export interface JsonArgsValidatorResult {
 }
 
 /**
+ * Determines whether a discovery transaction or argument draft contains edits.
+ *
+ * A draft is considered dirty when it is a non-empty, non-whitespace string
+ * that differs from its original value. Nullish or empty inputs are clean.
+ *
+ * @param draft The current draft value.
+ * @param original The original value to compare against.
+ * @returns True when the draft contains unsaved edits.
+ */
+export function hasUnsavedDiscoveryEdits(
+  draft: unknown,
+  original: unknown = '',
+): boolean {
+  if (draft === null || draft === undefined) {
+    return false
+  }
+
+  if (typeof draft !== 'string') {
+    return true
+  }
+
+  if (draft.trim() === '') {
+    return false
+  }
+
+  const originalValue = typeof original === 'string' ? original : ''
+  return draft !== originalValue
+}
+
+/**
  * Safely parses and validates a string as JSON arguments.
  *
  * Requirements:

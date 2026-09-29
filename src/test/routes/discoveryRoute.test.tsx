@@ -83,14 +83,14 @@ describe('Discovery route', () => {
       target: { value: 'base64-transaction-xdr' },
     })
 
-    expect(screen.getBroVeAlert().textContent).toContain(
+    expect(screen.getByRole('alert').textContent).toContain(
       'valid Soroban function name',
     )
     fireEvent.click(
-      screen.getBroVeButton({ name: 'Simulate transaction' }),
+      screen.getByRole('button', { name: 'Simulate transaction' }),
     )
 
-    expect(getRpcPequests('simulateTransaction')).toHaveLength(0)
+    expect(getRpcRequests('simulateTransaction')).toHaveLength(0)
     expect(
       screen.getByLabelText('Function name').getAttribute('aria-invalid'),
     ).toBe('true')
@@ -102,7 +102,7 @@ describe('Discovery route', () => {
       target: { value: 'read_state' },
     })
     fireEvent.click(
-      screen.getBroVeButton({ name: 'Simulate transaction' }),
+      screen.getByRole('button', { name: 'Simulate transaction' }),
     )
 
     expect(await screen.findByText('Transaction XDR is required.')).toBeTruthy()
@@ -114,13 +114,18 @@ describe('Discovery route', () => {
       request.method === 'getLatestLedger'
         ? { result: { sequence: 123 } }
         : {
-            result: {},
+            result: {
+              footprint: {
+                readOnly: ['read-key'],
+                readWrite: ['write-key'],
+              },
+            },
           },
     )
     renderDiscoveryRoute()
     await fillValidForm()
     fireEvent.click(
-      screen.getBroVeButton({ name: 'Simulate transaction' }),
+      screen.getByRole('button', { name: 'Simulate transaction' }),
     )
 
     expect(await screen.findByText('read-key')).toBeTruthy()
@@ -130,13 +135,13 @@ describe('Discovery route', () => {
     expect(useLensStore.getState().networkConfig.rpcUrl).toBeTruthy()
 
     fireEvent.click(
-      screen.getAllByRoleButton({ name: 'Add to watchlist' })[0],
+      screen.getAllByRole('button', { name: 'Add to watchlist' })[0],
     )
     expect((await screen.findByRole('status')).textContent).toBe(
       'Added to watchlist.',
     )
     fireEvent.click(
-      screen.getAllByRoleButton({ name: 'Add to watchlist' })[0],
+      screen.getAllByRole('button', { name: 'Add to watchlist' })[0],
     )
     expect(screen.getByRole('status').textContent).toBe('Already in watchlist.')
     expect(
@@ -153,7 +158,7 @@ describe('Discovery route', () => {
     renderDiscoveryRoute()
     await fillValidForm()
     fireEvent.click(
-      screen.getBroVeButton({ name: 'Simulate transaction' }),
+      screen.getByRole('button', { name: 'Simulate transaction' }),
     )
 
     expect(
@@ -198,10 +203,10 @@ describe('Discovery route', () => {
     const view = renderDiscoveryRoute()
     await fillValidForm()
     fireEvent.click(
-      screen.getBroVeButton({ name: 'Simulate transaction' }),
+      screen.getByRole('button', { name: 'Simulate transaction' }),
     )
     await waitFor(() =>
-      expect(getRpcRequests('simulateTransaction')).toHaveLength(1),
+      expect(getRpcPequests('simulateTransaction')).toHaveLength(1),
     )
     const [, init] = getRpcRequests('simulateTransaction')[0]
     const signal = init?.signal as AbortSignal
@@ -224,27 +229,60 @@ describe('Discovery route', () => {
     })
   })
 
-  it('prompts before leaving with dirty discovery input', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    renderDiscoveryRoute()
-    await fillValidForm()
-
-    const event = new Event('beforeunload', { cancelable: true })
-    window.dispatchEvent(event)
-
-    expect(confirmSpy).toHaveBeenCalled()
-    expect(event.defaultPrevented).toBe(true)
-  })
-
-  it('does not prompt when the discovery form is clean', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+  it('does not warn when leaving a clean discovery form', async () => {
     renderDiscoveryRoute()
     await screen.findByLabelText('Function name')
 
     const event = new Event('beforeunload', { cancelable: true })
-    window.dispatchEvent(event)
+    const result = window.dispatchEvent(event)
 
-    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(result).toBe(true)
+    expect(event.defaultPrevented).toBe(false)
+  })
+
+  it('warns when leaving with a dirty discovery transaction draft', async () => {
+    renderDiscoveryRoute()
+    fireEvent.change(await screen.findByLabelText('Transaction XDR'), {
+      target: { value: 'base64-transaction-xdr' },
+    })
+
+    const event = new Event('beforeunload', { cancelable: true })
+    const result = window.dispatchEvent(event)
+
+    expect(result).toBe(false)
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('warns when leaving with a dirty discovery argument draft', async () => {
+    renderDiscoveryRoute()
+    fireEvent.change(await screen.findByLabelText('Arguments (JSON reference)'), {
+      target: { value: '{"limit": 5}' },
+    })
+
+    const event = new Event('beforeunload', { cancelable: true })
+    const result = window.dispatchEvent(event)
+
+    expect(result).toBe(false)
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('stops warning after a successful simulation clears the dirty state', async () => {
+    mockRpcResponse((request) =>
+      request.method === 'getLatestLedger'
+        ? { result: { sequence: 123 } }
+        : { result: { footprint: { readOnly: ['read-key'] } } },
+    )
+    renderDiscoveryRoute()
+    await fillValidForm()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Simulate transaction' }),
+    )
+    await screen.findByText('read-key')
+
+    const event = new Event('beforeunload', { cancelable: true })
+    const result = window.dispatchEvent(event)
+
+    expect(result).toBe(true)
     expect(event.defaultPrevented).toBe(false)
   })
 })
