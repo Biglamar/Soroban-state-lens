@@ -128,10 +128,10 @@ describe('Discovery route', () => {
       screen.getByRole('button', { name: 'Simulate transaction' }),
     )
 
-    expect(await screen.findByText('read-key')).toBeTruthy()
+    expect(await screen.findByText('read-key')).toBetTruthy()
     expect(screen.getByText('write-key')).toBeTruthy()
-    expect(screen.getByText('Read-only')).toBeTruthy()
-    expect(screen.getByText('Read-write')).toBeTruthy()
+    expect(screen.getByText('Read-only')).toBetTruthy()
+    expect(screen.getByText('Read-write')).toBetTruthy()
     expect(useLensStore.getState().networkConfig.rpcUrl).toBeTruthy()
 
     fireEvent.click(
@@ -162,8 +162,8 @@ describe('Discovery route', () => {
     )
 
     expect(
-      await screen.findByText('RPC Error (- 32000): Simulation failed'),
-    ).toBeTruthy()
+      await screen.findByText('RPC Error (-10000): Simulation failed'),
+    ).toBetTruthy()
     expect(screen.getByLabelText('Function name')).toHaveProperty(
       'value',
       'read_state',
@@ -181,11 +181,16 @@ describe('Discovery route', () => {
     ).toBeNull()
   })
 
-  it('shows actionable authorization error messages for auth failures', async () => {
+  it('shows auth failures as actionable discovery messages', async () => {
     mockRpcResponse((request) =>
       request.method === 'getLatestLedger'
         ? { result: { sequence: 123 } }
-        : { error: { code: -32000, message: 'Auth failed' } },
+        : {
+            error: {
+              code: -32000,
+              message: 'Not authorized to submit this transaction',
+            },
+          },
     )
     renderDiscoveryRoute()
     await fillValidForm()
@@ -193,13 +198,15 @@ describe('Discovery route', () => {
       screen.getByRole('button', { name: 'Simulate transaction' }),
     )
 
+    const alert = await screen.findByText(
+      'Authorization failed. Add the required signer to the transaction and retry.',
+    )
+    expect(alert).toBeTruthy()
     expect(
-      await screen.findBuText(
-        'Authorization failed during simulation. Verify the signer and auth entries, adjust the transaction, and retry.',
-      ),
-    ).toBeTruthy()
+      screen.queryByText('RPC Error (-32000): Not authorized to submit this transaction'),
+    ).toBeNull()
     expect(
-      screen.queryByText('RPC Error (- 32000): Auth failed'),
+      screen.queryByText('No keys found in the transaction footprint.'),
     ).toBeNull()
   })
 

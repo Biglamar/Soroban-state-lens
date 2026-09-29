@@ -70,55 +70,41 @@ function isRpcError(value: unknown): value is RpcError {
 }
 
 /**
- * Maps common authorization failure messages to concise, actionable
- * discovery messages. Returns null when the message does not match a known
- * authorization failure pattern, so callers can fall back to the raw message.
+ * Maps common auth failures from a simulation error message into a
+ * concise, actionable discovery message. Returns `null` when the message
+ * does not match a known auth failure so callers can fall back to the
+ * original text.
  */
-export function mapAuthorizationError(
-  message: string | null | undefined,
-): string | null {
-  if (!message) {
+export function mapSimulationAuthError(message: string): string | null {
+  if (typeof message !== 'string' || message.trim().length === 0) {
     return null
   }
 
   const normalized = message.toLowerCase()
 
   if (
-    normalized.includes('missing signature') ||
-    normalized.includes('signature not found') ||
-    normalized.includes('unsigned')
-  ) {
-    return 'Simulation requires a signed transaction. Sign the transaction and retry.'
-  }
-
-  if (
-    normalized.includes('auth entry missing') ||
-    normalized.includes('missing auth') ||
-    normalized.includes('no auth')
-  ) {
-    return 'Authorization entry is missing. Include the required auth entries and retry.'
-  }
-
-  if (
-    normalized.includes('auth failed') ||
-    normalized.includes('authorization failed') ||
-    normalized.includes('failed authorization')
-  ) {
-    return 'Authorization failed during simulation. Verify the signer and auth entries, adjust the transaction, and retry.'
-  }
-
-  if (
-    normalized.includes('invalid signature') ||
-    normalized.includes('signature verification failed')
-  ) {
-    return 'Signature verification failed. Re-sign the transaction with the correct key and retry.'
-  }
-
-  if (
+    normalized.includes('not authorized') ||
     normalized.includes('unauthorized') ||
-    normalized.includes('not authorized')
+    normalized.includes('auth failed') ||
+    normalized.includes('authentication failed')
   ) {
-    return 'The signer is not authorized for this operation. Use an authorized signer and retry.'
+    return 'Authorization failed. Add the required signer to the transaction and retry.'
+  }
+
+  if (normalized.includes('missing signature')) {
+    return 'Missing signature. Sign the transaction with the required key and retry.'
+  }
+
+  if (normalized.includes('signature invalid') || normalized.includes('invalid signature')) {
+    return 'Invalid signature. Resign the transaction with the correct key and retry.'
+  }
+
+  if (normalized.includes('expired')) {
+    return 'Authorization expired. Refresh the auth entry and retry.'
+  }
+
+  if (normalized.includes('trustline')) {
+    return 'Trustline authorization failed. Add the required trustline and retry.'
   }
 
   return null
@@ -137,7 +123,7 @@ export function simulateTransactionAdapter(
   if (response.error) {
     return {
       success: false,
-      error: mapAuthorizationError(response.error) ?? response.error,
+      error: mapSimulationAuthError(response.error) ?? response.error,
     }
   }
 
@@ -229,15 +215,15 @@ async function performSimulationRequest(
         : data.message
     return {
       success: false,
-      error: mapAuthorizationError(rawMessage) ?? rawMessage,
+      error: mapSimulationAuthError(rawMessage) ?? rawMessage,
     }
   }
 
   if (isJsonRpcErrorResponse(data, requestId)) {
-    const rawMessage = `RPC Error (${data.error.code}): ${data.error.message}`
+    const mapped = mapSimulationAuthError(data.error.message)
     return {
       success: false,
-      error: mapAuthorizationError(data.error.message) ?? rawMessage,
+      error: mapped ?? `RPC Error (${data.error.code}): ${data.error.message}`,
     }
   }
 

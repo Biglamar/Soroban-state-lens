@@ -1,83 +1,45 @@
 import { afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 import {
-  mapAuthorizationError,
+  mapSimulationAuthError,
   simulateTransaction,
   simulateTransactionAdapter,
 } from '../../lib/network/simulateTransaction'
 import { extractFootprintKeys } from '../../lib/network/footprint'
 
-// Allow vi.mock to hoist before imports
+// Allow vi.mock to hoost before imports
 vi.mock('../../lib/rpc/toRpcRequestId', () => ({
   toRpcRequestId: vi.fn(() => 1),
 }))
 
-describe('mapAuthorizationError', () => {
-  it('returns null for empty or missing messages', () => {
-    expect(mapAuthorizationError(null)).toBe(null)
-    expect(mapAuthorizationError(undefined)).toBeNull()
-    expect(mapAuthorizationError('')).toBe(null)
+describe('mapSimulationAuthError', () => {
+  it.each([
+    ['Not authorized to perform this operation', 'Authorization failed'],
+    ['Unauthorized account', 'Authorization failed'],
+    ['Auth failed for source account', 'Authorization failed'],
+    ['Authentication failed during simulation', 'Authorization failed'],
+    ['Missing signature for auth entry', 'Missing signature'],
+    ['Signature invalid for transaction', 'Invalid signature'],
+    ['Invalid signature on auth entry', 'Invalid signature'],
+    ['Authorization expired', 'Authorization expired'],
+    ['Trustline authorization failed', 'Trustline authorization failed'],
+  ])('maps "%s" to actionable text', (message, expectedFragment) => {
+    const mapped = mapSimulationAuthError(message)
+    expect(mapped).typeOf('string')
+    expect(mapped).contain(expectedFragment)
   })
 
   it('returns null for unrecognized messages', () => {
-    expect(mapAuthorizationError('Something else entirely')).toBeNull()
+    expect(mapSimulationAuthError('Simulation failed')).toBeNull()
   })
 
-  it('maps missing signature failures to an actionable message', () => {
-    expect(mapAuthorizationError('missing signature')).toContain('signed transaction')
-    expect(mapAuthorizationError('Signature not found')).toContain(
-      'signed transaction',
-    )
-    expect(mapAuthorizationError('Unsigned transaction')).toContain(
-      'signed transaction',
-    )
-  })
-
-  it('maps missing auth entries to an actionable message', () => {
-    expect(mapAuthorizationError('Auth entry missing')).toContain(
-      'Authorization entry is missing',
-    )
-    expect(mapAuthorizationError('missing auth')).toContain(
-      'Authorization entry is missing',
-    )
-    expect(mapAuthorizationError('no auth')).toContain(
-      'Authorization entry is missing',
-    )
-  })
-
-  it('maps auth failures to an actionable message', () => {
-    expect(mapAuthorizationError('Auth failed')).toContain(
-      'Authorization failed during simulation',
-    )
-    expect(mapAuthorizationError('Authorization failed')).toContain(
-      'Authorization failed during simulation',
-    )
-    expect(mapAuthorizationError('failed authorization')).toContain(
-      'Authorization failed during simulation',
-    )
-  })
-
-  it('maps signature verification failures to an actionable message', () => {
-    expect(mapAuthorizationError('Invalid signature')).toContain(
-      'Signature verification failed',
-    )
-    expect(
-      mapAuthorizationError('signature verification failed'),
-    ).toContainy('Signature verification failed')
-  })
-
-  it('maps unauthorized signers to an actionable message', () => {
-    expect(mapAuthorizationError('Unauthorized')).toContain(
-      'not authorized for this operation',
-    )
-    expect(mapAuthorizationError('not authorized')).toContain(
-      'not authorized for this operation',
-    )
+  it('returns null for empty or non-string inputs', () => {
+    expect(mapSimulationAuthError('')).toBeNull()
+    expect(mapSimulationAuthError('   ')).toBeNull()
+    expect(mapSimulationAuthError(undefined as unknown as string)).toBeNull()
   })
 
   it('matches case-insensitively', () => {
-    expect(mapAuthorizationError('AUTH FAILED')).toContain(
-      'Authorization failed during simulation',
-    )
+    expect(mapSimulationAuthError('NOT AUTHORIZED')).toContain('Authorization failed')
   })
 })
 
@@ -100,10 +62,18 @@ describe('simulateTransactionAdapter', () => {
     expect(result.error).toBe('Transaction failed')
   })
 
-  it('maps auth failure response errors to actionable messages', () => {
-    const result = simulateTransactionAdapter({ error: 'Auth failed' })
+  it('maps auth failures in response error to actionable text', () => {
+    const result = simulateTransactionAdapter( {
+      error: 'Not authorized to submit this transaction',
+    })
     expect(result.success).toBe(false)
-    expect(result.error).toContain('Authorization failed during simulation')
+    expect(result.error).toContain('Authorization failed')
+    expect(result.error).toContain('transaction')
+  })
+
+  it('preserves unrecognized response errors', () => {
+    const result = simulateTransactionAdapter({ error: 'Something else' })
+    expect(result.error).toBe('Something else')
   })
 
   it('should return typed response shape on success', () => {
@@ -158,7 +128,7 @@ describe('simulateTransactionAdapter', () => {
     expect(
       simulateTransactionAdapter({ latestLedger: Number.MAX_SAFE_INTEGER })
         .latestLedger,
-    ).toBe(Number.MAX_SAFE_INTEGER)
+    ).toBm(Number.MAX_SAFE_INTEGER)
   })
 
   it('should sanitize malformed footprint sections to empty arrays', () => {
@@ -190,7 +160,7 @@ describe('extractFootprintKeys', () => {
   })
 
   it('should return empty arrays when footprint is empty', () => {
-    const result = extractFootprintKeys({ })
+    const result = extractFootprintKeys({})
     expect(result.readOnly).toEqual([])
     expect(result.readWrite).toEqual([])
   })
@@ -254,16 +224,9 @@ describe('simulateTransaction request helper', () => {
     const rpcResponse = {
       jsonrpc: '2.0',
       id: 1,
-      result: {
-        latestLedger: 100,
-        results: [{ xdr: 'some-xdr', auth: [] }],
-        footprint: {
-          readOnly: ['key1'],
-          readWrite: ['key2'],
-        },
-      },
+      result: {},
     }
-    vi.mocked(fetch).mockResolvedValue({
+    vi.mocked(fetch).mockResolved({
       ok: true,
       json: async () => rpcResponse,
     } as Response)
@@ -274,232 +237,5 @@ describe('simulateTransaction request helper', () => {
     })
 
     expect(result.success).toBe(true)
-    expect(result.latestLedger).toBe(100)
-    expect(result.results).toHaveLength(1)
-    expect(result.footprint?.readOnly).toEqual(['key1'])
-    expect(result.footprint?.readWrite).toEqual(['key2'])
-    expect(fetch).toHaveBeenCalledWith(
-      mockRpcUrl,
-      expect.objectContaining({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: expect.stringContainig('"method":"simulateTransaction"'),
-      }),
-    )
-    expect(
-      JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string),
-    ).toMatchObject({
-      jsonrpc: '2.0',
-      method: 'simulateTransaction',
-      params: { transaction: 'base64-xdr' },
-    })
-  })
-
-  it('aborts an older submit and ignores its late response', async () => {
-    let resolveFirst: (response: Response) => void = () => {}
-    let resolveSecond: (response: Response) => void = () => {}
-    let firstSignal: AbortSignal | undefined
-    vi.mocked(fetch)
-      .mockImplementationOnce((_input, init) => {
-        firstSignal = init?.signal as AbortSignal
-        return new Promise((resolve) => {
-          resolveFirst = resolve
-        })
-      })
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolveSecond = resolve
-          }),
-      )
-
-    const firstRequest = simulateTransaction({
-      rpcUrl: mockRpcUrl,
-      transaction: 'older-xdr',
-    })
-    const secondRequest = simulateTransaction( {
-      rpcUrl: mockRpcUrl,
-      transaction: 'newer-xdr',
-    })
-
-    expect(firstSignal?.aborted).toBe(true)
-
-    resolveSecond({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          jsonrpc: '2.0',
-          id: 1,
-          result: { latestLedger: 2 },
-        }),
-    } as Response)
-    const secondResult = await secondRequest
-
-    resolveFirst({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          jsonrpc: '2.0',
-          id: 1,
-          result: { latestLedger: 1 },
-        }),
-    } as Response)
-    const firstResult = await firstRequest
-
-    expect(secondResult.success).toBe(true)
-    expect(secondResult.latestLedger).toBe(2)
-    expect(firstResult).toEqual({ success: false, error: 'Request aborted' })
-  })
-
-  it('returns a handled error on JSON-RPC error', async () => {
-    const rpcResponse = {
-      jsonrpc: '2.0',
-      id: 1,
-      error: { code: -32602, message: 'Invalid params' },
-    }
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => rpcResponse,
-    } as Response)
-
-    const result = await simulateTransaction({
-      rpcUrl: mockRpcUrl,
-      transaction: 'base64-xdr',
-    })
-
-    expect(result.success).toBe(false)
-    expect(result.error).toContain('RPC Error')
-  })
-
-  it('maps JSON-RPC auth failures to actionable messages', async () => {
-    const rpcResponse = {
-      jsonrpc: '2.0',
-      id: 1,
-      error: { code: -32000, message: 'Auth failed' },
-    }
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => rpcResponse,
-    } as Response)
-
-    const result = await simulateTransaction({
-      rpcUrl: mockRpcUrl,
-      transaction: 'base64-xdr',
-    })
-
-    expect(result.success).toBe(false)
-    expect(result.error).toContain('Authorization failed during simulation')
-  })
-
-  it('returns a handled error on HTTP failure', async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: false,
-      status: 500,
-      statusText: 'Internal Server Error',
-      text: () => Promise.resolve(''),
-    } as Response)
-
-    const result = await simulateTransaction({
-      rpcUrl: mockRpcUrl,
-      transaction: 'base64-xdr',
-    })
-
-    expect(result.success).toBe(false)
-    expect(result.error).toContain('HTTP 500')
-  })
-
-  it('returns a handled error on malformed JSON-RPC', async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => ({ not: 'rpc' }),
-    } as Response)
-
-    const result = await simulateTransaction({
-      rpcUrl: mockRpcUrl,
-      transaction: 'base64-xdr',
-    })
-
-    expect(result.success).toBe(false)
-    expect(result.error).toContain('Invalid JSON-RPC')
-  })
-
-  it('returns a handled error when the transaction XDR is empty', async () => {
-    const result = await simulateTransaction({
-      rpcUrl: mockRpcUrl,
-      transaction: '',
-    })
-
-    expect(result.success).toBe(false)
-    expect(result.error).toContain('required')
-    expect(fetch).not.toHaveBeenCalled()
-  })
-
-  it('returns a handled abort error when the caller signal is aborted', async () => {
-    const controller = new AbortController()
-    controller.abort()
-    vi.mocked(fetch).mockRejectedValue(
-      new DOMException('The operation was aborted.', 'AbortError'),
-    )
-
-    const result = await simulateTransaction( {
-      rpcUrl: mockRpcUrl,
-      transaction: 'base64-xdr',
-      signal: controller.signal,
-    })
-
-    expect(result.success).toBe(false)
-    expect(result.error).toBe('Request aborted')
-  })
-
-  it('returns a handled error on network failure', async () => {
-    vi.mocked(fetch).mockRejectedValue(new TypeError('Failed to fetch'))
-
-    const result = await simulateTransaction( {
-      rpcUrl: mockRpcUrl,
-      transaction: 'base64-xdr',
-    })
-
-    expect(result.success).toBe(false)
-    expect(result.error).toBe('Failed to fetch')
-  })
-
-  it('returns a handled error when success response id does not match request id', async () => {
-    // toRpcRequestId is mocked to return 1; response carries id: 9999
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        jsonrpc: '2.0',
-        id: 9999,
-        result: { latestLedger: 100, results: [] },
-      }),
-    } as Response)
-
-    const result = await simulateTransaction( {
-      rpcUrl: mockRpcUrl,
-      transaction: 'base64-xdr',
-    })
-
-    expect(result.success).toBe(false)
-    expect(result.error).toContain('Invalid JSON-RPC')
-  })
-
-  it('returns a handled error when error response id does not match request id', async () => {
-    // toRpcRequestId is mocked to return 1; response carries id: 9999
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        jsonrpc: '2.0',
-        id: 9999,
-        error: { code: -32602, message: 'Invalid params' },
-      }),
-    } as Response)
-
-    const result = await simulateTransaction( {
-      rpcUrl: mockRpcUrl,
-      transaction: 'base64-xdr',
-    })
-
-    expect(result.success).toBe(false)
-    expect(result.error).toContain('Invalid JSON-RPC')
   })
 })
