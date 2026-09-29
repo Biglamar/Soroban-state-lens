@@ -1,6 +1,7 @@
 import { createJSONStorage } from 'zustand/middleware'
 import { parsePersistedNetworkConfig } from '../lib/storage/parsePersistedNetworkConfig'
 import { serializePersistedNetworkConfig } from '../lib/storage/serializePersistedNetworkConfig'
+import { normalizeNetworkScopeId } from './networkScope'
 import {
   BigIntDisplayMode,
   ByteDisplayMode,
@@ -8,7 +9,12 @@ import {
   DEFAULT_PREFERENCES,
 } from './types'
 import { validateNetworkConfigPatch } from './validateNetworkConfigPatch'
-import type { DisplayPreferences, NetworkConfig, WatchlistItem } from './types'
+import type {
+  DisplayPreferences,
+  NetworkConfig,
+  NetworkScopedContractBuckets,
+  WatchlistItem,
+} from './types'
 import type { PersistedNetworkConfig } from '../lib/storage/serializePersistedNetworkConfig'
 import type { PersistStorage } from 'zustand/middleware'
 
@@ -34,7 +40,7 @@ export const DEFAULT_NETWORK_CONFIG: NetworkConfig = DEFAULT_NETWORKS.futurenet
 export interface PersistedState {
   networkConfig: PersistedNetworkConfig
   preferences: DisplayPreferences
-  watchlist?: Record<string, Array<WatchlistItem>>
+  watchlist?: NetworkScopedContractBuckets<Array<WatchlistItem>>
 }
 
 /**
@@ -125,7 +131,11 @@ function unwrapPersistedState(
   const persisted = persistedState as Record<string, unknown>
   const version = getPersistedStateVersion(persistedState)
 
-  if (version !== null && version !== 0 && version !== PERSISTED_STATE_VERSION) {
+  if (
+    version !== null &&
+    version !== 0 &&
+    version !== PERSISTED_STATE_VERSION
+  ) {
     return null
   }
 
@@ -193,16 +203,10 @@ export function mergeNetworkConfig(
   currentState: { networkConfig: NetworkConfig },
 ): {
   networkConfig: NetworkConfig
-  watchlist: Record<string, Array<WatchlistItem>>
+  watchlist: NetworkScopedContractBuckets<Array<WatchlistItem>>
 } {
   const hydratedState = unwrapPersistedState(persistedState)
-  const watchlist = sanitizeWatchlist(
-    hydratedState &&
-      typeof hydratedState === 'object' &&
-      'watchlist' in hydratedState
-      ? hydratedState.watchlist
-      : undefined,
-  )
+  let networkConfig = currentState.networkConfig
 
   if (hydratedState && 'networkConfig' in hydratedState) {
     const parsedNetworkConfig = parsePersistedNetworkConfig(
@@ -210,22 +214,51 @@ export function mergeNetworkConfig(
     )
 
     if (isValidNetworkConfig(parsedNetworkConfig)) {
-      return {
-        networkConfig: parsedNetworkConfig,
-        watchlist,
-      }
+      networkConfig = parsedNetworkConfig
+    } else {
+      console.warn(
+        '[LensStore] Persisted network config is invalid, falling back to default',
+        hydratedState.networkConfig,
+      )
     }
-
-    console.warn(
-      '[LensStore] Persisted network config is invalid, falling back to default',
-      hydratedState.networkConfig,
-    )
   }
 
   return {
-    networkConfig: currentState.networkConfig,
-    watchlist,
+    networkConfig,
+    watchlist: sanitizeNetworkWatchlist(
+      hydratedState &&
+        typeof hydratedState === 'object' &&
+        'watchlist' in hydratedState
+        ? hydratedState.watchlist
+        : undefined,
+      networkConfig.networkId,
+    ),
   }
+}
+
+export function sanitizeNetworkWatchlist(
+  value: unknown,
+  legacyNetworkId: string,
+): NetworkScopedContractBuckets<Array<WatchlistItem>> {
+  if (typeof value !== 'object' || value === null) {
+    return {}
+  }
+
+  const source = value as Record<string, unknown>
+  const legacyWatchlist = sanitizeWatchlist(value)
+  if (Object.keys(legacyWatchlist).length > 0) {
+    return { [normalizeNetworkScopeId(legacyNetworkId)]: legacyWatchlist }
+  }
+
+  const networkScoped: Record<string, Record<string, Array<WatchlistItem>>> = {}
+  for (const [networkId, contracts] of Object.entries(source)) {
+    if (typeof contracts !== 'object' || contracts === null) continue
+    const validContracts = sanitizeWatchlist(contracts)
+    if (Object.keys(validContracts).length > 0) {
+      networkScoped[normalizeNetworkScopeId(networkId)] = validContracts
+    }
+  }
+  return networkScoped
 }
 
 /**

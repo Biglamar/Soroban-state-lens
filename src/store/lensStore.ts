@@ -7,6 +7,7 @@ import { getLedgerEntries } from '../lib/network/getLedgerEntries'
 import { mapLedgerEntriesToStoreEntries } from '../lib/network/mapLedgerEntriesToStoreEntries'
 import { isDecoderWorkerError } from '../types/decoder-worker'
 import { createDecoderWorkerSafe } from '../workers/createDecoderWorkerSafe'
+import { normalizeNetworkScopeId } from './networkScope'
 import { createContractSlice } from './contractSlice'
 import { createContractSpecSlice } from './contractSpecSlice'
 import {
@@ -237,6 +238,7 @@ const createSnapshotSlice = (
   ) =>
     set((state) => {
       const normalizedContractId = contractId.trim()
+      const networkId = normalizeNetworkScopeId(state.networkConfig.networkId)
 
       // Reject empty contract IDs
       if (!normalizedContractId) {
@@ -254,7 +256,7 @@ const createSnapshotSlice = (
 
       const normalizedLabel =
         typeof label === 'string' ? label.trim() || undefined : label
-      const existing = state.snapshots[normalizedContractId] ?? []
+      const existing = state.snapshots[networkId]?.[normalizedContractId] ?? []
       const timestamp = Date.now()
       const nextSnapshot = {
         id: `${timestamp}-${crypto.randomUUID()}`,
@@ -271,18 +273,24 @@ const createSnapshotSlice = (
       return {
         snapshots: {
           ...state.snapshots,
-          [normalizedContractId]: trimmedSnapshots,
+          [networkId]: {
+            ...state.snapshots[networkId],
+            [normalizedContractId]: trimmedSnapshots,
+          },
         },
       }
     }),
 
   getSnapshots: (contractId: string) => {
-    return get().snapshots[contractId] ?? []
+    const state = get()
+    const networkId = normalizeNetworkScopeId(state.networkConfig.networkId)
+    return state.snapshots[networkId]?.[contractId] ?? []
   },
 
   removeSnapshot: (contractId: string, snapshotId: string) =>
     set((state) => {
       const normalizedContractId = contractId.trim()
+      const networkId = normalizeNetworkScopeId(state.networkConfig.networkId)
 
       // Reject empty contract IDs
       if (!normalizedContractId) {
@@ -292,9 +300,12 @@ const createSnapshotSlice = (
       return {
         snapshots: {
           ...state.snapshots,
-          [normalizedContractId]: (
-            state.snapshots[normalizedContractId] ?? []
-          ).filter((s) => s.id !== snapshotId),
+          [networkId]: {
+            ...state.snapshots[networkId],
+            [normalizedContractId]: (
+              state.snapshots[networkId]?.[normalizedContractId] ?? []
+            ).filter((s) => s.id !== snapshotId),
+          },
         },
       }
     }),
@@ -302,14 +313,26 @@ const createSnapshotSlice = (
   clearSnapshots: (contractId: string) =>
     set((state) => {
       const normalizedContractId = contractId.trim()
+      const networkId = normalizeNetworkScopeId(state.networkConfig.networkId)
 
       // Reject empty contract IDs
       if (!normalizedContractId) {
         return state
       }
 
-      const { [normalizedContractId]: _, ...rest } = state.snapshots
-      return { snapshots: rest }
+      const currentNetworkSnapshots = state.snapshots[networkId] ?? {}
+      const { [normalizedContractId]: _, ...remainingContractSnapshots } =
+        currentNetworkSnapshots
+      const { [networkId]: __, ...otherNetworkSnapshots } = state.snapshots
+      return {
+        snapshots:
+          Object.keys(remainingContractSnapshots).length > 0
+            ? {
+                ...otherNetworkSnapshots,
+                [networkId]: remainingContractSnapshots,
+              }
+            : otherNetworkSnapshots,
+      }
     }),
 })
 
@@ -511,13 +534,14 @@ const createWatchlistSlice = (
     set((state) => {
       const normalizedContractId = contractId.trim()
       const normalizedKeyPath = keyPath.trim()
+      const networkId = normalizeNetworkScopeId(state.networkConfig.networkId)
 
       if (!normalizedContractId || !normalizedKeyPath) {
         return state
       }
 
       const currentItems = deduplicateWatchlistItems(
-        state.watchlist[normalizedContractId],
+        state.watchlist[networkId]?.[normalizedContractId],
       )
 
       // Check if item already exists (duplicate protection)
@@ -531,49 +555,84 @@ const createWatchlistSlice = (
       return {
         watchlist: {
           ...state.watchlist,
-          [normalizedContractId]: [
-            ...currentItems,
-            {
-              contractId: normalizedContractId,
-              keyPath: normalizedKeyPath,
-              timestamp: Date.now(),
-            },
-          ],
+          [networkId]: {
+            ...state.watchlist[networkId],
+            [normalizedContractId]: [
+              ...currentItems,
+              {
+                contractId: normalizedContractId,
+                keyPath: normalizedKeyPath,
+                timestamp: Date.now(),
+              },
+            ],
+          },
         },
       }
     }),
 
   removeFromWatchlist: (contractId: string, keyPath: string) =>
     set((state) => {
+      const normalizedContractId = contractId.trim()
+      const normalizedKeyPath = keyPath.trim()
+      const networkId = normalizeNetworkScopeId(state.networkConfig.networkId)
       const remainingItems = deduplicateWatchlistItems(
-        (state.watchlist[contractId] ?? []).filter(
-          (item) => item.keyPath !== keyPath,
+        (state.watchlist[networkId]?.[normalizedContractId] ?? []).filter(
+          (item) => item.keyPath !== normalizedKeyPath,
         ),
       )
 
       if (remainingItems.length === 0) {
-        const { [contractId]: _, ...rest } = state.watchlist
-        return { watchlist: rest }
+        const currentNetworkWatchlist = state.watchlist[networkId] ?? {}
+        const { [normalizedContractId]: _, ...remainingContracts } =
+          currentNetworkWatchlist
+        const { [networkId]: __, ...otherNetworkWatchlists } = state.watchlist
+        return {
+          watchlist:
+            Object.keys(remainingContracts).length > 0
+              ? {
+                  ...otherNetworkWatchlists,
+                  [networkId]: remainingContracts,
+                }
+              : otherNetworkWatchlists,
+        }
       }
 
       return {
         watchlist: {
           ...state.watchlist,
-          [contractId]: remainingItems,
+          [networkId]: {
+            ...state.watchlist[networkId],
+            [normalizedContractId]: remainingItems,
+          },
         },
       }
     }),
 
   getWatchlistForContract: (contractId: string) => {
-    return deduplicateWatchlistItems(get().watchlist[contractId]).filter(
-      (item) => item.contractId === contractId,
-    )
+    const state = get()
+    const networkId = normalizeNetworkScopeId(state.networkConfig.networkId)
+    return deduplicateWatchlistItems(
+      state.watchlist[networkId]?.[contractId],
+    ).filter((item) => item.contractId === contractId)
   },
 
   clearWatchlist: (contractId: string) =>
     set((state) => {
-      const { [contractId]: _, ...rest } = state.watchlist
-      return { watchlist: rest }
+      const normalizedContractId = contractId.trim()
+      const networkId = normalizeNetworkScopeId(state.networkConfig.networkId)
+      const currentNetworkWatchlist = state.watchlist[networkId] ?? {}
+      const { [normalizedContractId]: _, ...remainingContracts } =
+        currentNetworkWatchlist
+      const { [networkId]: __, ...otherNetworkWatchlists } = state.watchlist
+      return {
+        watchlist:
+          Object.keys(remainingContracts).length > 0
+            ? {
+                ...otherNetworkWatchlists,
+                [networkId]: remainingContracts,
+              }
+            : otherNetworkWatchlists,
+      }
     }),
 })
 
@@ -663,14 +722,18 @@ export const useContractLoadStatus = () =>
 export const useContractLoadError = () =>
   useLensStore((state) => state.contractLoadError)
 export const useSnapshots = (contractId: string) =>
-  useLensStore((state) => state.snapshots[contractId] ?? EMPTY_ARRAY)
+  useLensStore((state) => {
+    const networkId = normalizeNetworkScopeId(state.networkConfig.networkId)
+    return state.snapshots[networkId]?.[contractId] ?? EMPTY_ARRAY
+  })
 export const useWatchlist = (contractId: string) => {
   return useLensStore(
-    useShallow((state) =>
-      deduplicateWatchlistItems(state.watchlist[contractId]).filter(
-        (item) => item.contractId === contractId,
-      ),
-    ),
+    useShallow((state) => {
+      const networkId = normalizeNetworkScopeId(state.networkConfig.networkId)
+      return deduplicateWatchlistItems(
+        state.watchlist[networkId]?.[contractId],
+      ).filter((item) => item.contractId === contractId)
+    }),
   )
 }
 

@@ -53,7 +53,7 @@ describe('snapshotSlice', () => {
     expect(getSnapshots('c2')[0].label).toBeUndefined()
   })
 
-  it('changing contracts clears selected path and prior snapshots', () => {
+  it('changing contracts clears selection while retaining snapshots', () => {
     const {
       setActiveContractId,
       setSelectedKeyPath,
@@ -66,8 +66,26 @@ describe('snapshotSlice', () => {
     setActiveContractId('new-contract')
 
     expect(getStoreState().selectedKeyPath).toBeNull()
-    expect(getSnapshots('old-contract')).toEqual([])
+    expect(getSnapshots('old-contract')).toHaveLength(1)
     expect(getStoreState().activeContractId).toBe('new-contract')
+  })
+
+  it('keeps snapshots isolated by network for the same contract', () => {
+    const { addSnapshot, getSnapshots } = useLensStore.getState()
+
+    useLensStore.getState().setNetworkConfig({ networkId: 'futurenet' })
+    addSnapshot('c1', {}, 1, 'Futurenet snapshot')
+    useLensStore.getState().setNetworkConfig({ networkId: 'testnet' })
+    addSnapshot('c1', {}, 2, 'Testnet snapshot')
+
+    expect(getSnapshots('c1').map((snapshot) => snapshot.label)).toEqual([
+      'Testnet snapshot',
+    ])
+
+    useLensStore.getState().setNetworkConfig({ networkId: 'futurenet' })
+    expect(getSnapshots('c1').map((snapshot) => snapshot.label)).toEqual([
+      'Futurenet snapshot',
+    ])
   })
 
   it('addSnapshot stores a shallow copy of entries', () => {

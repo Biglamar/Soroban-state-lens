@@ -87,7 +87,7 @@ export interface ContractSnapshot {
 
 // Snapshot slice
 export interface SnapshotSlice {
-  snapshots: Record<string, Array<ContractSnapshot>>
+  snapshots: NetworkScopedContractBuckets<Array<ContractSnapshot>>
   addSnapshot: (
     contractId: string,
     entries: Record<string, LedgerEntry>,
@@ -137,12 +137,16 @@ export interface WatchlistItem {
 
 // Watchlist slice
 export interface WatchlistSlice {
-  watchlist: Record<string, Array<WatchlistItem>>
+  watchlist: NetworkScopedContractBuckets<Array<WatchlistItem>>
   addToWatchlist: (contractId: string, keyPath: string) => void
   removeFromWatchlist: (contractId: string, keyPath: string) => void
   getWatchlistForContract: (contractId: string) => Array<WatchlistItem>
   clearWatchlist: (contractId: string) => void
 }
+
+export type NetworkScopedContractBuckets<T> = Partial<
+  Record<string, Partial<Record<string, T>>>
+>
 
 // Contract spec slice – parsed schema data keyed by contract ID
 export interface ContractSpecSlice {
