@@ -29,7 +29,7 @@ describe('SearchLandingScreen recent history action', () => {
     render(<SearchLandingScreen />)
 
     const walletBtn = screen.getByRole('button', {
-      name: /Connect Wallet \(Currently unavailable\)/i,
+      name: /Connect Wallet/i,
     })
     expect(walletBtn).toBeTruthy()
     expect(walletBtn.hasAttribute('disabled')).toBe(true)
