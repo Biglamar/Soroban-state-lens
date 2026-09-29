@@ -60,6 +60,8 @@ export interface ScVal {
 export interface NormalizeOptions {
   /** When set, nodes at this depth or deeper are replaced with a truncated marker. */
   maxDepth?: number
+  /** When set, vec/map children beyond this count are replaced with a truncated marker. */
+  maxChildren?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -304,13 +306,27 @@ function createUnsupportedNode(
   path: Path,
   variant: string,
   scVal: ScVal | null | undefined,
+  sourceType?: string,
 ): UnsupportedNode {
   return {
     kind: 'unsupported',
     path,
     variant,
+    sourceType: sourceType ?? variant,
     raw: toRaw(scVal),
   }
+}
+
+function normalizeMaxChildren(value: unknown): number | undefined {
+  if (
+    typeof value !== 'number' ||
+    !Number.isFinite(value) ||
+    !Number.isInteger(value) ||
+    value < 0
+  ) {
+    return undefined
+  }
+  return value
 }
 
 // ---------------------------------------------------------------------------
@@ -339,7 +355,13 @@ export function normalizeNode(
   depth?: number,
 ): Node {
   const currentDepth = depth ?? 0
-  const maxDepth = options?.maxDepth ?? MAX_DEPTH_DEFAULT
+  const maxDepth =
+    typeof options?.maxDepth === 'number' &&
+    Number.isFinite(options.maxDepth) &&
+    options.maxDepth >= 0 &&
+    Number.isInteger(options.maxDepth)
+      ? options.maxDepth
+      : MAX_DEPTH_DEFAULT
 
   if (currentDepth >= maxDepth) {
     return createTruncatedNode(path, currentDepth)
@@ -638,15 +660,20 @@ export function normalizeNode(
         } satisfies VecNode
       }
 
-      // Pre-allocate array with known size for better performance
-      const itemCount = Math.min(
-        normalizedScVal.value.length,
-        MAX_CHILDREN_DEFAULT,
-      )
-      const items: Array<Node> = new Array(itemCount)
+      const maxChildren = normalizeMaxChildren(options?.maxChildren)
+      const childCount =
+        maxChildren === undefined
+          ? normalizedScVal.value.length
+          : Math.min(normalizedScVal.value.length, maxChildren)
+      const isTruncated = childCount < normalizedScVal.value.length
 
-      // Use for loop with better error handling for large arrays
-      for (let i = 0; i < itemCount; i++) {
+      // Pre-allocate the bounded result array.
+      const items: Array<Node> = new Array(
+        childCount + (isTruncated ? 1 : 0),
+      )
+
+      // Use a bounded loop with per-item error handling.
+      for (let i = 0; i < childCount; i++) {
         try {
           const childPath = appendPath(path, { type: 'index', index: i })
           items[i] = normalizeNode(
@@ -664,6 +691,13 @@ export function normalizeNode(
             normalizedScVal.value[i],
           )
         }
+      }
+
+      if (isTruncated) {
+        items[childCount] = createTruncatedNode(
+          appendPath(path, { type: 'index', index: childCount }),
+          currentDepth + 1,
+        )
       }
 
       return {
@@ -684,11 +718,13 @@ export function normalizeNode(
     case ScValType.SCV_MAP: {
       const entries: Array<{ key: Node; value: Node }> = []
       if (Array.isArray(normalizedScVal.value)) {
-        const entryCount = Math.min(
-          normalizedScVal.value.length,
-          MAX_CHILDREN_DEFAULT,
-        )
-        for (let index = 0; index < entryCount; index++) {
+        const maxChildren = normalizeMaxChildren(options?.maxChildren)
+        const childCount =
+          maxChildren === undefined
+            ? normalizedScVal.value.length
+            : Math.min(normalizedScVal.value.length, maxChildren)
+
+        for (let index = 0; index < childCount; index += 1) {
           const entry = normalizedScVal.value[index]
           // js-xdr exposes struct fields via accessor methods (e.g.
           // `entry.key()`), while plain test fixtures use `entry.key`.
@@ -714,6 +750,11 @@ export function normalizeNode(
             currentDepth + 1,
           )
           entries.push({ key: keyNode, value: valueNode })
+        }
+
+        if (childCount < normalizedScVal.value.length) {
+          const truncation = createTruncatedNode(path, currentDepth + 1)
+          entries.push({ key: truncation, value: truncation })
         }
       }
       return {

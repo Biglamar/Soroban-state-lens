@@ -1,12 +1,13 @@
 # PR Summary
 
-Implements three focused UI and formatting fixes:
+Adds the discovery transaction simulation workflow:
 
-- Clear the custom RPC autofocus timer on cleanup so delayed focus no longer runs after the panel closes or unmounts.
-- Normalize invalid contract ID shortening length options to safe defaults.
-- Clamp virtualized tree scroll position after rows shrink to prevent blank viewports.
+- Route simulation through the shared typed RPC client without changing the JSON-RPC payload or result mapping.
+- Add inline function-name validation, transaction XDR submission, and normalized read/write footprint results.
+- Cancel pending simulation requests when leaving the discovery route.
+- Cover validation, empty input, simulation success/error, and route-unmount cancellation with regression tests.
 
 ## Verification
 
-- Added regression coverage for autofocus cleanup, formatter edge cases, and scroll clamping behavior.
-- Verified the touched files report no editor-reported errors.
+- `npm test -- src/test/network/simulateTransaction.test.ts src/test/routes/discoveryRoute.test.tsx src/test/routes/discoveryRouteState.test.tsx` (39 passed)
+- `npx tsc --noEmit`

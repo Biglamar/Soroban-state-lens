@@ -25,6 +25,7 @@ export const createContractSlice = (
   clearActiveContractId: () =>
     set(() => ({
       activeContractId: null,
+      selectedKeyPath: null,
     })),
 
   setSelectedKeyPath: (keyPath: string) =>

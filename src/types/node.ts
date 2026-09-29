@@ -175,6 +175,7 @@ export interface UnsupportedNode {
   kind: 'unsupported'
   path: Path
   variant: string
+  sourceType?: string
   raw: RawScVal
 }
 

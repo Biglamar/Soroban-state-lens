@@ -68,9 +68,9 @@ function formatPreview(
     case 'unsupported':
       return row.node.variant
     case 'truncated':
-      return `depth=${row.node.depth}`
+      return `truncated at depth=${row.node.depth}`
     case 'cycle':
-      return `depth=${row.node.depth}`
+      return `cycle detected at depth=${row.node.depth}`
     default:
       return ''
   }
@@ -142,7 +142,7 @@ export function TreeRow({
   return (
     <div
       ref={rowRef}
-      role="button"
+      role="treeitem"
       tabIndex={tabIndex}
       data-testid="tree-row"
       onClick={() => onActivate?.(row)}
@@ -153,6 +153,9 @@ export function TreeRow({
       }`}
       style={{ height: rowHeight }}
       aria-label={`Open ${row.label}`}
+      aria-level={row.depth + 1}
+      aria-selected={isSelected}
+      aria-expanded={row.hasChildren ? isExpanded : undefined}
     >
       <div
         style={{ marginLeft: row.depth * 16 }}
