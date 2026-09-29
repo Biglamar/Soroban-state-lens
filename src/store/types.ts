@@ -70,10 +70,19 @@ export interface LedgerDataSlice {
 // Expanded nodes slice
 export interface ExpandedNodesSlice {
   expandedNodes: Array<string>
+  expandedNodesByContract: Record<string, Array<string>>
   setExpanded: (nodeId: string, expanded: boolean) => void
   toggleExpanded: (nodeId: string) => void
   expandAll: (nodeIds: Array<string>) => void
   collapseAll: () => void
+  setExpandedForContract: (
+    contractId: string,
+    nodeId: string,
+    expanded: boolean,
+  ) => void
+  toggleExpandedForContract: (contractId: string, nodeId: string) => void
+  expandAllForContract: (contractId: string, nodeIds: Array<string>) => void
+  collapseAllForContract: (contractId: string) => void
 }
 
 // Contract snapshot record

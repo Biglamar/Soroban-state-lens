@@ -25,6 +25,7 @@ describe('lensStore', () => {
     it('initializes with no expanded nodes', () => {
       const state = getStoreState()
       expect(state.expandedNodes).toEqual([])
+      expect(state.expandedNodesByContract).toEqual({})
     })
 
     it('initializes with no selected key path', () => {
@@ -149,6 +150,26 @@ describe('lensStore', () => {
   })
 
   describe('expandedNodes slice', () => {
+    it('keeps expansion state independent for normalized contract IDs', () => {
+      const {
+        toggleExpandedForContract,
+        setExpandedForContract,
+        collapseAllForContract,
+      } = useLensStore.getState()
+
+      toggleExpandedForContract(' cabc ', 'root.child')
+      setExpandedForContract('CDEF', 'root.child', true)
+      expect(getStoreState().expandedNodesByContract).toEqual({
+        CABC: ['root.child'],
+        CDEF: ['root.child'],
+      })
+
+      collapseAllForContract('cabc')
+      expect(getStoreState().expandedNodesByContract).toEqual({
+        CDEF: ['root.child'],
+      })
+    })
+
     it('setExpanded adds node to expanded list', () => {
       const { setExpanded } = useLensStore.getState()
 

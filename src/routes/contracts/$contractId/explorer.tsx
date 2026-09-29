@@ -15,6 +15,8 @@ import type { LedgerEntry } from '../../../store/types'
 import type { FlattenTreeRoot } from '../../../lib/tree/flatTreeRow'
 import type { Node } from '../../../types/node'
 
+const EMPTY_EXPANDED_NODES: Array<string> = []
+
 export function resolveSelectedKeyPath(
   selectedKeyPath: string | null,
   rows: Array<{ id?: string; keyPath?: string }>,
@@ -131,10 +133,20 @@ function ContractExplorer() {
     (state) => state.contractLoadAttemptCount,
   )
   const rpcUrl = useLensStore((state) => state.networkConfig.rpcUrl)
-  const expandedNodes = useLensStore((state) => state.expandedNodes)
-  const toggleExpanded = useLensStore((state) => state.toggleExpanded)
-  const expandAll = useLensStore((state) => state.expandAll)
-  const collapseAll = useLensStore((state) => state.collapseAll)
+  const expandedNodes = useLensStore(
+    (state) =>
+      state.expandedNodesByContract[normalizedContractId] ??
+      EMPTY_EXPANDED_NODES,
+  )
+  const toggleExpandedForContract = useLensStore(
+    (state) => state.toggleExpandedForContract,
+  )
+  const expandAllForContract = useLensStore(
+    (state) => state.expandAllForContract,
+  )
+  const collapseAllForContract = useLensStore(
+    (state) => state.collapseAllForContract,
+  )
   const selectedKeyPath = useLensStore((state) => state.selectedKeyPath)
   const setSelectedKeyPath = useLensStore((state) => state.setSelectedKeyPath)
   const clearSelectedKeyPath = useLensStore(
@@ -205,11 +217,11 @@ function ContractExplorer() {
   )
 
   const handleExpandAll = () => {
-    expandAll(expandableNodeIds)
+    expandAllForContract(normalizedContractId, expandableNodeIds)
   }
 
   const handleCollapseAll = () => {
-    collapseAll()
+    collapseAllForContract(normalizedContractId)
   }
 
   useEffect(() => {
@@ -386,7 +398,9 @@ function ContractExplorer() {
               <VirtualizedTreeList
                 rows={flatRows}
                 expandedNodeIds={expandedNodes}
-                onToggleExpand={toggleExpanded}
+                onToggleExpand={(nodeId) =>
+                  toggleExpandedForContract(normalizedContractId, nodeId)
+                }
                 selectedRowId={selectedKeyPath}
                 onActivateRow={(row) => handleActivateRow(row.keyPath)}
               />
