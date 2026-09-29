@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 import {
+  mapAuthorizationError,
   simulateTransaction,
   simulateTransactionAdapter,
 } from '../../lib/network/simulateTransaction'
@@ -9,6 +10,76 @@ import { extractFootprintKeys } from '../../lib/network/footprint'
 vi.mock('../../lib/rpc/toRpcRequestId', () => ({
   toRpcRequestId: vi.fn(() => 1),
 }))
+
+describe('mapAuthorizationError', () => {
+  it('returns null for empty or missing messages', () => {
+    expect(mapAuthorizationError(null)).toBe(null)
+    expect(mapAuthorizationError(undefined)).toBeNull()
+    expect(mapAuthorizationError('')).toBe(null)
+  })
+
+  it('returns null for unrecognized messages', () => {
+    expect(mapAuthorizationError('Something else entirely')).toBeNull()
+  })
+
+  it('maps missing signature failures to an actionable message', () => {
+    expect(mapAuthorizationError('missing signature')).toContain('signed transaction')
+    expect(mapAuthorizationError('Signature not found')).toContain(
+      'signed transaction',
+    )
+    expect(mapAuthorizationError('Unsigned transaction')).toContain(
+      'signed transaction',
+    )
+  })
+
+  it('maps missing auth entries to an actionable message', () => {
+    expect(mapAuthorizationError('Auth entry missing')).toContain(
+      'Authorization entry is missing',
+    )
+    expect(mapAuthorizationError('missing auth')).toContain(
+      'Authorization entry is missing',
+    )
+    expect(mapAuthorizationError('no auth')).toContain(
+      'Authorization entry is missing',
+    )
+  })
+
+  it('maps auth failures to an actionable message', () => {
+    expect(mapAuthorizationError('Auth failed')).toContain(
+      'Authorization failed during simulation',
+    )
+    expect(mapAuthorizationError('Authorization failed')).toContain(
+      'Authorization failed during simulation',
+    )
+    expect(mapAuthorizationError('failed authorization')).toContain(
+      'Authorization failed during simulation',
+    )
+  })
+
+  it('maps signature verification failures to an actionable message', () => {
+    expect(mapAuthorizationError('Invalid signature')).toContain(
+      'Signature verification failed',
+    )
+    expect(
+      mapAuthorizationError('signature verification failed'),
+    ).toContainy('Signature verification failed')
+  })
+
+  it('maps unauthorized signers to an actionable message', () => {
+    expect(mapAuthorizationError('Unauthorized')).toContain(
+      'not authorized for this operation',
+    )
+    expect(mapAuthorizationError('not authorized')).toContain(
+      'not authorized for this operation',
+    )
+  })
+
+  it('matches case-insensitively', () => {
+    expect(mapAuthorizationError('AUTH FAILED')).toContain(
+      'Authorization failed during simulation',
+    )
+  })
+})
 
 describe('simulateTransactionAdapter', () => {
   it('should return success false when response is null', () => {
@@ -27,6 +98,12 @@ describe('simulateTransactionAdapter', () => {
     const result = simulateTransactionAdapter({ error: 'Transaction failed' })
     expect(result.success).toBe(false)
     expect(result.error).toBe('Transaction failed')
+  })
+
+  it('maps auth failure response errors to actionable messages', () => {
+    const result = simulateTransactionAdapter({ error: 'Auth failed' })
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Authorization failed during simulation')
   })
 
   it('should return typed response shape on success', () => {
@@ -113,7 +190,7 @@ describe('extractFootprintKeys', () => {
   })
 
   it('should return empty arrays when footprint is empty', () => {
-    const result = extractFootprintKeys({})
+    const result = extractFootprintKeys({ })
     expect(result.readOnly).toEqual([])
     expect(result.readWrite).toEqual([])
   })
@@ -206,7 +283,7 @@ describe('simulateTransaction request helper', () => {
       expect.objectContaining({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: expect.stringContaining('"method":"simulateTransaction"'),
+        body: expect.stringContainig('"method":"simulateTransaction"'),
       }),
     )
     expect(
@@ -240,7 +317,7 @@ describe('simulateTransaction request helper', () => {
       rpcUrl: mockRpcUrl,
       transaction: 'older-xdr',
     })
-    const secondRequest = simulateTransaction({
+    const secondRequest = simulateTransaction( {
       rpcUrl: mockRpcUrl,
       transaction: 'newer-xdr',
     })
@@ -294,6 +371,26 @@ describe('simulateTransaction request helper', () => {
     expect(result.error).toContain('RPC Error')
   })
 
+  it('maps JSON-RPC auth failures to actionable messages', async () => {
+    const rpcResponse = {
+      jsonrpc: '2.0',
+      id: 1,
+      error: { code: -32000, message: 'Auth failed' },
+    }
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => rpcResponse,
+    } as Response)
+
+    const result = await simulateTransaction({
+      rpcUrl: mockRpcUrl,
+      transaction: 'base64-xdr',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Authorization failed during simulation')
+  })
+
   it('returns a handled error on HTTP failure', async () => {
     vi.mocked(fetch).mockResolvedValue({
       ok: false,
@@ -344,7 +441,7 @@ describe('simulateTransaction request helper', () => {
       new DOMException('The operation was aborted.', 'AbortError'),
     )
 
-    const result = await simulateTransaction({
+    const result = await simulateTransaction( {
       rpcUrl: mockRpcUrl,
       transaction: 'base64-xdr',
       signal: controller.signal,
@@ -357,7 +454,7 @@ describe('simulateTransaction request helper', () => {
   it('returns a handled error on network failure', async () => {
     vi.mocked(fetch).mockRejectedValue(new TypeError('Failed to fetch'))
 
-    const result = await simulateTransaction({
+    const result = await simulateTransaction( {
       rpcUrl: mockRpcUrl,
       transaction: 'base64-xdr',
     })
@@ -377,7 +474,7 @@ describe('simulateTransaction request helper', () => {
       }),
     } as Response)
 
-    const result = await simulateTransaction({
+    const result = await simulateTransaction( {
       rpcUrl: mockRpcUrl,
       transaction: 'base64-xdr',
     })
@@ -393,11 +490,11 @@ describe('simulateTransaction request helper', () => {
       json: async () => ({
         jsonrpc: '2.0',
         id: 9999,
-        error: { code: -32600, message: 'Invalid Request' },
+        error: { code: -32602, message: 'Invalid params' },
       }),
     } as Response)
 
-    const result = await simulateTransaction({
+    const result = await simulateTransaction( {
       rpcUrl: mockRpcUrl,
       transaction: 'base64-xdr',
     })

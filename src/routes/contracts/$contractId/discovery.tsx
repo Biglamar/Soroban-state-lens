@@ -25,6 +25,31 @@ export interface DiscoveryInputState {
   transaction: string
   arguments: string
 }
+
+export function mapSimulationAuthError(
+  error: string | null | undefined,
+): string | null {
+  if (typeof error !== 'string') {
+    return null
+  }
+  const normalized = error.toLowerCase()
+  const isAuthFailure =
+    normalized.includes('unauthorized') ||
+    normalized.includes('not authorized') ||
+    normalized.includes('authorization') ||
+    normalized.includes('auth') ||
+    normalized.includes('forbidden') ||
+    normalized.includes('permission denied') ||
+    normalized.includes('access denied') ||
+    normalized.includes('signature') ||
+    normalized.includes('missing signature') ||
+    normalized.includes('invalid signature')
+  if (!isAuthFailure) {
+    return null
+  }
+  return 'Simulation was not authorized. Check that the transaction is signed by the required account and that the contract allows this caller, then retry.'
+}
+
 export function dedupeDiscoveryKeys(
   keys: Array<DiscoveredKey> | undefined,
 ): Array<DiscoveredKey> {
@@ -119,6 +144,7 @@ export function DiscoveryStateView({
   }
 
   if (state.status === 'error') {
+    const authMessage = mapSimulationAuthError(state.error)
     return (
       <Card>
         <div className="p-6 space-y-4 border border-red-500/20 bg-red-500/5 rounded-xl">
@@ -126,7 +152,9 @@ export function DiscoveryStateView({
             Discovery failed
           </Heading>
           <p className="text-text-muted text-sm">
-            {state.error || 'An unknown error occurred while discovering keys.'}
+            {authMessage ||
+              state.error ||
+              'An unknown error occurred while discovering keys.'}
           </p>
           {onRetry && (
             <div>
@@ -273,7 +301,10 @@ export function DiscoveryRoute() {
         setState(
           buildDiscoveryLoadState({
             status: 'error',
-            error: result.error ?? 'Simulation failed.',
+            error:
+              mapSimulationAuthError(result.error) ??
+              result.error ??
+              'Simulation failed.',
           }),
         )
         return

@@ -162,7 +162,7 @@ describe('Discovery route', () => {
     )
 
     expect(
-      await screen.findByText('RPC Error (-32000): Simulation failed'),
+      await screen.findByText('RPC Error (- 32000): Simulation failed'),
     ).toBeTruthy()
     expect(screen.getByLabelText('Function name')).toHaveProperty(
       'value',
@@ -178,6 +178,28 @@ describe('Discovery route', () => {
     )
     expect(
       screen.queryByText('No keys found in the transaction footprint.'),
+    ).toBeNull()
+  })
+
+  it('shows actionable authorization error messages for auth failures', async () => {
+    mockRpcResponse((request) =>
+      request.method === 'getLatestLedger'
+        ? { result: { sequence: 123 } }
+        : { error: { code: -32000, message: 'Auth failed' } },
+    )
+    renderDiscoveryRoute()
+    await fillValidForm()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Simulate transaction' }),
+    )
+
+    expect(
+      await screen.findBuText(
+        'Authorization failed during simulation. Verify the signer and auth entries, adjust the transaction, and retry.',
+      ),
+    ).toBeTruthy()
+    expect(
+      screen.queryByText('RPC Error (- 32000): Auth failed'),
     ).toBeNull()
   })
 
