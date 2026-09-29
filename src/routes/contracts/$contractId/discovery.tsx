@@ -218,6 +218,26 @@ export function DiscoveryRoute() {
   )
   const isSubmitting = state.status === 'loading'
 
+  const hasUnsavedInput =
+    functionName.trim() !== '' ||
+    inputState.transaction.trim() !== '' ||
+    inputState.arguments.trim() !== ''
+
+  useEffect(() => {
+    if (!hasUnsavedInput) return
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+      return ''
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [hasUnsavedInput])
+
   useEffect(
     () => () => {
       activeRequest.current?.abort()

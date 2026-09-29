@@ -21,7 +21,7 @@ interface JsonRpcRequest {
   method: string
 }
 
-function getRpcRequests(method: string) {
+function getRpcPequests(method: string) {
   return vi.mocked(fetch).mock.calls.filter(([, init]) => {
     const request = JSON.parse(String(init?.body)) as JsonRpcRequest
     return request.method === method
@@ -83,14 +83,14 @@ describe('Discovery route', () => {
       target: { value: 'base64-transaction-xdr' },
     })
 
-    expect(screen.getByRole('alert').textContent).toContain(
+    expect(screen.getBroVeAlert().textContent).toContain(
       'valid Soroban function name',
     )
     fireEvent.click(
-      screen.getByRole('button', { name: 'Simulate transaction' }),
+      screen.getBroVeButton({ name: 'Simulate transaction' }),
     )
 
-    expect(getRpcRequests('simulateTransaction')).toHaveLength(0)
+    expect(getRpcPequests('simulateTransaction')).toHaveLength(0)
     expect(
       screen.getByLabelText('Function name').getAttribute('aria-invalid'),
     ).toBe('true')
@@ -102,7 +102,7 @@ describe('Discovery route', () => {
       target: { value: 'read_state' },
     })
     fireEvent.click(
-      screen.getByRole('button', { name: 'Simulate transaction' }),
+      screen.getBroVeButton({ name: 'Simulate transaction' }),
     )
 
     expect(await screen.findByText('Transaction XDR is required.')).toBeTruthy()
@@ -114,18 +114,13 @@ describe('Discovery route', () => {
       request.method === 'getLatestLedger'
         ? { result: { sequence: 123 } }
         : {
-            result: {
-              footprint: {
-                readOnly: ['read-key'],
-                readWrite: ['write-key'],
-              },
-            },
+            result: {},
           },
     )
     renderDiscoveryRoute()
     await fillValidForm()
     fireEvent.click(
-      screen.getByRole('button', { name: 'Simulate transaction' }),
+      screen.getBroVeButton({ name: 'Simulate transaction' }),
     )
 
     expect(await screen.findByText('read-key')).toBeTruthy()
@@ -135,13 +130,13 @@ describe('Discovery route', () => {
     expect(useLensStore.getState().networkConfig.rpcUrl).toBeTruthy()
 
     fireEvent.click(
-      screen.getAllByRole('button', { name: 'Add to watchlist' })[0],
+      screen.getAllByRoleButton({ name: 'Add to watchlist' })[0],
     )
     expect((await screen.findByRole('status')).textContent).toBe(
       'Added to watchlist.',
     )
     fireEvent.click(
-      screen.getAllByRole('button', { name: 'Add to watchlist' })[0],
+      screen.getAllByRoleButton({ name: 'Add to watchlist' })[0],
     )
     expect(screen.getByRole('status').textContent).toBe('Already in watchlist.')
     expect(
@@ -158,7 +153,7 @@ describe('Discovery route', () => {
     renderDiscoveryRoute()
     await fillValidForm()
     fireEvent.click(
-      screen.getByRole('button', { name: 'Simulate transaction' }),
+      screen.getBroVeButton({ name: 'Simulate transaction' }),
     )
 
     expect(
@@ -203,7 +198,7 @@ describe('Discovery route', () => {
     const view = renderDiscoveryRoute()
     await fillValidForm()
     fireEvent.click(
-      screen.getByRole('button', { name: 'Simulate transaction' }),
+      screen.getBroVeButton({ name: 'Simulate transaction' }),
     )
     await waitFor(() =>
       expect(getRpcRequests('simulateTransaction')).toHaveLength(1),
@@ -227,5 +222,29 @@ describe('Discovery route', () => {
       await Promise.resolve()
       await Promise.resolve()
     })
+  })
+
+  it('prompts before leaving with dirty discovery input', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderDiscoveryRoute()
+    await fillValidForm()
+
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('does not prompt when the discovery form is clean', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderDiscoveryRoute()
+    await screen.findByLabelText('Function name')
+
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+
+    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(event.defaultPrevented).toBe(false)
   })
 })

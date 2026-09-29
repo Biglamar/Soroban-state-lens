@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   DiscoveryStateView,
   buildDiscoveryLoadState,
+  hasDiscoveryDraftEdits,
 } from '../../routes/contracts/$contractId/discovery'
 import { dedupeExplorerKeys } from '../../routes/contracts/$contractId/explorer'
 
@@ -88,6 +89,36 @@ describe('discovery route state', () => {
     expect(
       screen.getAllByRole('button', { name: 'Add to watchlist' }),
     ).toHaveLength(1)
+  })
+
+  it('detects edits in discovery transaction or argument drafts', () => {
+    expect(
+      hasDiscoveryDraftEdits({
+        transactionXdr: '',
+        argumentDraft: '',
+      }),
+    ).toBe(false)
+
+    expect(
+      hasDiscoveryDraftEdits({
+        transactionXdr: '  ',
+        argumentDraft: '\n',
+      }),
+    ).toBe(false)
+
+    expect(
+      hasDiscoveryDraftEdits({
+        transactionXdr: 'AAAA',
+        argumentDraft: '',
+      }),
+    ).toBe(true)
+
+    expect(
+      hasDiscoveryDraftEdits({
+        transactionXdr: '',
+        argumentDraft: '{"x":1}',
+      }),
+    ).toBe(true)
   })
 
   it('deduplicates explorer keys while preserving first-seen order', () => {
