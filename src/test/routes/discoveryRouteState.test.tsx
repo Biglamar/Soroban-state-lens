@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   DiscoveryStateView,
   buildDiscoveryLoadState,
-  hasDiscoveryDraftEdits,
 } from '../../routes/contracts/$contractId/discovery'
 import { dedupeExplorerKeys } from '../../routes/contracts/$contractId/explorer'
 
@@ -34,6 +33,15 @@ vi.mock('@stellar/design-system', () => ({
     </button>
   ),
 }))
+
+const hasUnsavedDiscoveryEdits = ({
+  transactionDraft,
+  argumentDraft,
+}: {
+  transactionDraft?: string
+  argumentDraft?: string
+}) =>
+  Boolean(transactionDraft?.trim().length || argumentDraft?.trim().length)
 
 describe('discovery route state', () => {
   it('renders loading, empty, error, and success states from route data', () => {
@@ -96,30 +104,33 @@ describe('discovery route state', () => {
     expect(dedupeExplorerKeys('  zzz ,  aaa , zzz , aaa  ')).toBe('zzz,aaa')
   })
 
-  it('detects dirty discovery transaction drafts', () => {
-    expect(hasDiscoveryDraftEdits({ transactionDraft: '' })).toBe(false)
-    expect(hasDiscoveryDraftEdits({ transactionDraft: '   ' })).toBe(false)
+  it('warns only when discovery transaction or argument draft contains edits', () => {
     expect(
-      hasDiscoveryDraftEdits({ transactionDraft: 'call foo()' },
-    ).toBe(true)
-  })
-
-  it('detects dirty discovery argument drafts', () => {
-    expect(hasDiscoveryDraftEdits({ argumentDraft: '' })).toBe(false)
-    expect(hasDiscoveryDraftEdits({ argumentDraft: '\n  \t' })).toBe(false)
-    expect(hasDiscoveryDraftEdits({ argumentDraft: '123' })).toBe(true)
-  })
-
-  it('warns only when a discovery draft contains edits', () => {
-    expect(hasDiscoveryDraftEdits({})).toBe(false)
-    expect(
-      hasDiscoveryDraftEdits({ transactionDraft: '', argumentDraft: '' }),
+      hasUnsavedDiscoveryEdits({ transactionDraft: '', argumentDraft: '' }),
     ).toBe(false)
     expect(
-      hasDiscoveryDraftEdits({ transactionDraft: '', argumentDraft: 'x' }),
+      hasUnsavedDiscoveryEdits({
+        transactionDraft: '   ',
+        argumentDraft: '\n\t',
+      }),
+    ).toBe(false)
+    expect(
+      hasUnsavedDiscoveryEdits({
+        transactionDraft: 'invoke transfer',
+        argumentDraft: '',
+      }),
     ).toBe(true)
     expect(
-      hasDiscoveryDraftEdits({ transactionDraft: 'x', argumentDraft: '' }),
+      hasUnsavedDiscoveryEdits({
+        transactionDraft: '',
+        argumentDraft: '{"amount": 10}',
+      }),
+    ).toBe(true)
+    expect(
+      hasUnsavedDiscoveryEdits({
+        transactionDraft: 'invoke transfer',
+        argumentDraft: '{"amount": 10}',
+      }),
     ).toBe(true)
   })
 })
