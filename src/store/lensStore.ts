@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { deepClone } from '../lib/deepClone'
 import { getLedgerEntries } from '../lib/network/getLedgerEntries'
 import { mapLedgerEntriesToStoreEntries } from '../lib/network/mapLedgerEntriesToStoreEntries'
+import { normalizeContractIdInput } from '../lib/validation/normalizeContractIdInput'
 import { isDecoderWorkerError } from '../types/decoder-worker'
 import { createDecoderWorkerSafe } from '../workers/createDecoderWorkerSafe'
 import { createContractSlice } from './contractSlice'
@@ -159,6 +160,7 @@ const createExpandedNodesSlice = (
   set: (fn: (state: LensStore) => Partial<LensStore>) => void,
 ): ExpandedNodesSlice => ({
   expandedNodes: [],
+  expandedNodesByContract: {},
 
   setExpanded: (nodeId: string, expanded: boolean) =>
     set((state) => {
@@ -215,6 +217,77 @@ const createExpandedNodesSlice = (
     set(() => ({
       expandedNodes: [],
     })),
+
+  setExpandedForContract: (contractId, nodeId, expanded) => {
+    const normalizedContractId = normalizeContractIdInput(contractId)
+    const normalizedNodeId = nodeId.trim()
+    if (!normalizedContractId || !normalizedNodeId) return
+
+    set((state) => {
+      const current = state.expandedNodesByContract[normalizedContractId] ?? []
+      const includesNode = current.includes(normalizedNodeId)
+      if (includesNode === expanded) return state
+      return {
+        expandedNodesByContract: {
+          ...state.expandedNodesByContract,
+          [normalizedContractId]: expanded
+            ? [...current, normalizedNodeId]
+            : current.filter((id) => id !== normalizedNodeId),
+        },
+      }
+    })
+  },
+
+  toggleExpandedForContract: (contractId, nodeId) => {
+    const normalizedContractId = normalizeContractIdInput(contractId)
+    const normalizedNodeId = nodeId.trim()
+    if (!normalizedContractId || !normalizedNodeId) return
+
+    set((state) => {
+      const current = state.expandedNodesByContract[normalizedContractId] ?? []
+      return {
+        expandedNodesByContract: {
+          ...state.expandedNodesByContract,
+          [normalizedContractId]: current.includes(normalizedNodeId)
+            ? current.filter((id) => id !== normalizedNodeId)
+            : [...current, normalizedNodeId],
+        },
+      }
+    })
+  },
+
+  expandAllForContract: (contractId, nodeIds) => {
+    const normalizedContractId = normalizeContractIdInput(contractId)
+    if (!normalizedContractId) return
+    const normalizedNodeIds = nodeIds
+      .map((nodeId) => nodeId.trim())
+      .filter((nodeId) => nodeId.length > 0)
+
+    set((state) => {
+      const current = state.expandedNodesByContract[normalizedContractId] ?? []
+      const expanded = Array.from(new Set([...current, ...normalizedNodeIds]))
+      if (expanded.length === current.length) return state
+      return {
+        expandedNodesByContract: {
+          ...state.expandedNodesByContract,
+          [normalizedContractId]: expanded,
+        },
+      }
+    })
+  },
+
+  collapseAllForContract: (contractId) => {
+    const normalizedContractId = normalizeContractIdInput(contractId)
+    if (!normalizedContractId) return
+    set((state) => {
+      if (!state.expandedNodesByContract[normalizedContractId].length) {
+        return state
+      }
+      const { [normalizedContractId]: _, ...rest } =
+        state.expandedNodesByContract
+      return { expandedNodesByContract: rest }
+    })
+  },
 })
 
 export const DEFAULT_SNAPSHOT_RETENTION_LIMIT = 25
@@ -688,6 +761,7 @@ export const resetStore = () => {
     connectionStatus: ConnectionStatus.IDLE,
     ledgerData: {},
     expandedNodes: [],
+    expandedNodesByContract: {},
     snapshots: {},
     watchlist: {},
     contractSpecs: {},
