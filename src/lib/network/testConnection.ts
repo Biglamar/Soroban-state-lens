@@ -13,8 +13,11 @@ export interface TestConnectionResult {
  */
 export async function testRpcConnection(
   url: string,
+  signal?: AbortSignal,
 ): Promise<TestConnectionResult> {
-  const result = await getLatestLedgerConnectionCheck(url)
+  const result = signal
+    ? await getLatestLedgerConnectionCheck(url, undefined, signal)
+    : await getLatestLedgerConnectionCheck(url)
 
   if (result.success) {
     return { success: true }

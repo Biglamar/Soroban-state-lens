@@ -3,6 +3,7 @@ import { ContractLoadStatus } from '../../store/types'
 
 const mockGetLedgerEntries = vi.fn()
 const mockDecodeScVal = vi.fn()
+const mockTerminateDecoderWorkerSafe = vi.fn()
 const mockCreateDecoderWorkerSafe = vi.fn(() =>
   Promise.resolve({
     decodeScVal: mockDecodeScVal,
@@ -15,6 +16,7 @@ vi.mock('../../lib/network/getLedgerEntries', () => ({
 
 vi.mock('../../workers/createDecoderWorkerSafe', () => ({
   createDecoderWorkerSafe: mockCreateDecoderWorkerSafe,
+  terminateDecoderWorkerSafe: mockTerminateDecoderWorkerSafe,
 }))
 
 describe('loadContract action', () => {
@@ -23,12 +25,12 @@ describe('loadContract action', () => {
     mockGetLedgerEntries.mockReset()
     mockDecodeScVal.mockReset()
     mockCreateDecoderWorkerSafe.mockClear()
+    mockTerminateDecoderWorkerSafe.mockReset()
   })
 
   it('loads, decodes, and stores entries on success', async () => {
-    const { resetStore, getStoreState, useLensStore } = await import(
-      '../../store/lensStore'
-    )
+    const { resetStore, getStoreState, useLensStore } =
+      await import('../../store/lensStore')
     resetStore()
 
     mockGetLedgerEntries.mockResolvedValue({
@@ -59,10 +61,82 @@ describe('loadContract action', () => {
     expect(state.ledgerData['C1::Other::key-1'].rawXdr).toBe('xdr-1')
   })
 
-  it('sets EMPTY when the load succeeds with no entries', async () => {
-    const { resetStore, getStoreState, useLensStore } = await import(
-      '../../store/lensStore'
+  it('stores a safe reason beside raw XDR when decoding returns an error', async () => {
+    const { resetStore, getStoreState, useLensStore } =
+      await import('../../store/lensStore')
+    resetStore()
+
+    mockGetLedgerEntries.mockResolvedValue({
+      entries: [{ key: 'bad-key', xdr: 'bad-xdr' }],
+      latestLedger: 100,
+    })
+    mockDecodeScVal.mockResolvedValue({
+      code: 'DECODE_FAILED',
+      message: 'Malformed ScVal XDR',
+      details: { stack: 'private stack trace' },
+    })
+
+    await useLensStore.getState().loadContract('C_DECODE_ERROR', ['rpc-key'])
+
+    const entry = getStoreState().ledgerData['C_DECODE_ERROR::Other::bad-key']
+    expect(entry.value).toBe('bad-xdr')
+    expect(entry.rawXdr).toBe('bad-xdr')
+    expect(entry.decodeErrorReason).toBe('Malformed ScVal XDR')
+    expect(entry.decodeErrorReason).not.toContain('private stack trace')
+  })
+
+  it('restarts a failed decoder worker and continues decoding later entries', async () => {
+    const { resetStore, getStoreState, useLensStore } =
+      await import('../../store/lensStore')
+    resetStore()
+
+    const failedWorker = {
+      decodeScVal: vi.fn().mockRejectedValue(new Error('worker crashed')),
+    }
+    const replacementWorker = {
+      decodeScVal: vi.fn().mockResolvedValue({
+        kind: 'primitive',
+        path: [],
+        scType: 'string',
+        value: 'decoded sibling',
+        raw: { switch: 'ScvString', value: 'decoded sibling' },
+      }),
+    }
+    mockCreateDecoderWorkerSafe
+      .mockImplementationOnce(() => Promise.resolve(failedWorker))
+      .mockImplementationOnce(() => Promise.resolve(replacementWorker))
+    mockGetLedgerEntries.mockResolvedValue({
+      entries: [
+        { key: 'failed-key', xdr: 'failed-xdr' },
+        { key: 'valid-key', xdr: 'valid-xdr' },
+      ],
+      latestLedger: 100,
+    })
+
+    await useLensStore.getState().loadContract('C_RECOVER', ['rpc-key'])
+
+    const state = getStoreState()
+    expect(state.contractLoadStatus).toBe(ContractLoadStatus.SUCCESS)
+    expect(state.ledgerData['C_RECOVER::Other::failed-key']).toMatchObject({
+      value: 'failed-xdr',
+      rawXdr: 'failed-xdr',
+      decodeErrorReason: 'worker crashed',
+    })
+    expect(state.ledgerData['C_RECOVER::Other::valid-key'].value).toMatchObject(
+      {
+        value: 'decoded sibling',
+      },
     )
+    expect(mockCreateDecoderWorkerSafe).toHaveBeenCalledTimes(2)
+    expect(mockTerminateDecoderWorkerSafe).toHaveBeenCalledWith(failedWorker)
+    expect(mockTerminateDecoderWorkerSafe).toHaveBeenCalledWith(
+      replacementWorker,
+    )
+  })
+
+  it('sets EMPTY when the load succeeds with no entries', async () => {
+    const { resetStore, getStoreState, useLensStore } =
+      await import('../../store/lensStore')
     resetStore()
 
     mockGetLedgerEntries.mockResolvedValue({
@@ -85,9 +159,8 @@ describe('loadContract action', () => {
   })
 
   it('sets ERROR when load fails', async () => {
-    const { resetStore, getStoreState, useLensStore } = await import(
-      '../../store/lensStore'
-    )
+    const { resetStore, getStoreState, useLensStore } =
+      await import('../../store/lensStore')
     resetStore()
 
     mockGetLedgerEntries.mockRejectedValue(new Error('network failure'))
@@ -100,25 +173,26 @@ describe('loadContract action', () => {
   })
 
   it('ignores stale in-flight results and keeps newest response', async () => {
-    const { resetStore, getStoreState, useLensStore } = await import(
-      '../../store/lensStore'
-    )
+    const { resetStore, getStoreState, useLensStore } =
+      await import('../../store/lensStore')
     resetStore()
 
     let resolveFirst:
-      | ((
-          value: {
-            entries: Array<{
-              key: string
-              xdr: string
-              lastModifiedLedgerSeq?: number
-            }>
-            latestLedger: number
-          },
-        ) => void)
+      | ((value: {
+          entries: Array<{
+            key: string
+            xdr: string
+            lastModifiedLedgerSeq?: number
+          }>
+          latestLedger: number
+        }) => void)
       | undefined
     const firstPromise = new Promise<{
-      entries: Array<{ key: string; xdr: string; lastModifiedLedgerSeq?: number }>
+      entries: Array<{
+        key: string
+        xdr: string
+        lastModifiedLedgerSeq?: number
+      }>
       latestLedger: number
     }>((resolve) => {
       resolveFirst = resolve
@@ -127,9 +201,7 @@ describe('loadContract action', () => {
     mockGetLedgerEntries
       .mockReturnValueOnce(firstPromise)
       .mockResolvedValueOnce({
-        entries: [
-          { key: 'new-key', xdr: 'new-xdr', lastModifiedLedgerSeq: 2 },
-        ],
+        entries: [{ key: 'new-key', xdr: 'new-xdr', lastModifiedLedgerSeq: 2 }],
         latestLedger: 2,
       })
 
@@ -161,9 +233,8 @@ describe('loadContract action', () => {
   })
 
   it('ignores stale results that finish decoding after a newer request', async () => {
-    const { resetStore, getStoreState, useLensStore } = await import(
-      '../../store/lensStore',
-    )
+    const { resetStore, getStoreState, useLensStore } =
+      await import('../../store/lensStore')
     resetStore()
 
     let resolveFirstDecode: ((value: unknown) => void) | undefined
@@ -194,12 +265,20 @@ describe('loadContract action', () => {
         latestLedger: 2,
       })
 
-    const firstCall = useLensStore.getState().loadContract('C_DECODE_STALE', ['old'])
-    for (let attempt = 0; attempt < 10 && !firstWorker.decodeScVal.mock.calls.length; attempt += 1) {
+    const firstCall = useLensStore
+      .getState()
+      .loadContract('C_DECODE_STALE', ['old'])
+    for (
+      let attempt = 0;
+      attempt < 10 && !firstWorker.decodeScVal.mock.calls.length;
+      attempt += 1
+    ) {
       await Promise.resolve()
     }
 
-    const secondCall = useLensStore.getState().loadContract('C_DECODE_STALE', ['new'])
+    const secondCall = useLensStore
+      .getState()
+      .loadContract('C_DECODE_STALE', ['new'])
     await secondCall
     resolveFirstDecode?.({
       kind: 'primitive',
@@ -212,7 +291,9 @@ describe('loadContract action', () => {
 
     const state = getStoreState()
     expect(state.contractLoadStatus).toBe(ContractLoadStatus.SUCCESS)
-    expect(state.ledgerData['C_DECODE_STALE::Other::new-key'].rawXdr).toBe('new-xdr')
+    expect(state.ledgerData['C_DECODE_STALE::Other::new-key'].rawXdr).toBe(
+      'new-xdr',
+    )
     expect(state.ledgerData['C_DECODE_STALE::Other::old-key']).toBeUndefined()
   })
 })

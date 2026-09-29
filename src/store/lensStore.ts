@@ -5,7 +5,10 @@ import { deepClone } from '../lib/deepClone'
 import { getLedgerEntries } from '../lib/network/getLedgerEntries'
 import { mapLedgerEntriesToStoreEntries } from '../lib/network/mapLedgerEntriesToStoreEntries'
 import { isDecoderWorkerError } from '../types/decoder-worker'
-import { createDecoderWorkerSafe } from '../workers/createDecoderWorkerSafe'
+import {
+  createDecoderWorkerSafe,
+  terminateDecoderWorkerSafe,
+} from '../workers/createDecoderWorkerSafe'
 import {
   ConnectionStatus,
   ContractLoadStatus,
@@ -43,6 +46,16 @@ export type { LedgerEntry, LedgerKey } from './types'
 
 // Re-export for backwards compatibility
 export { DEFAULT_NETWORKS }
+
+function getDecoderFailureReason(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+  if (typeof error === 'string' && error.trim()) {
+    return error
+  }
+  return 'Decoder worker failed'
+}
 
 /**
  * Network config slice creator
@@ -155,7 +168,9 @@ const createExpandedNodesSlice = (
         return { expandedNodes: [...state.expandedNodes, normalizedNodeId] }
       } else {
         return {
-          expandedNodes: state.expandedNodes.filter((id) => id !== normalizedNodeId),
+          expandedNodes: state.expandedNodes.filter(
+            (id) => id !== normalizedNodeId,
+          ),
         }
       }
     }),
@@ -169,7 +184,9 @@ const createExpandedNodesSlice = (
 
       if (state.expandedNodes.includes(normalizedNodeId)) {
         return {
-          expandedNodes: state.expandedNodes.filter((id) => id !== normalizedNodeId),
+          expandedNodes: state.expandedNodes.filter(
+            (id) => id !== normalizedNodeId,
+          ),
         }
       }
       return { expandedNodes: [...state.expandedNodes, normalizedNodeId] }
@@ -181,7 +198,10 @@ const createExpandedNodesSlice = (
         .map((nodeId) => nodeId.trim())
         .filter((nodeId) => nodeId.length > 0)
 
-      const newExpanded = new Set([...state.expandedNodes, ...normalizedNodeIds])
+      const newExpanded = new Set([
+        ...state.expandedNodes,
+        ...normalizedNodeIds,
+      ])
       return { expandedNodes: Array.from(newExpanded) }
     }),
 
@@ -291,7 +311,11 @@ const createContractLoadSlice = (
       const controller = new AbortController()
       activeController = controller
       const { signal } = controller
-      const isRequestStale = () => currentRequestId !== requestId || signal.aborted
+      const isRequestStale = () =>
+        currentRequestId !== requestId || signal.aborted
+      let activeDecoderWorker: Awaited<
+        ReturnType<typeof createDecoderWorkerSafe>
+      > | null = null
 
       set((state) => ({
         activeContractId: contractId,
@@ -312,14 +336,40 @@ const createContractLoadSlice = (
           return
         }
 
-        const worker = await createDecoderWorkerSafe()
+        activeDecoderWorker = await createDecoderWorkerSafe()
         const decodedValuesByKey: Record<string, unknown> = {}
+        const decodeErrorReasonsByKey: Record<string, string> = {}
 
-        for (const entry of entries) {
-          const result = await worker.decodeScVal({ xdr: entry.xdr })
-          decodedValuesByKey[entry.key] = isDecoderWorkerError(result)
-            ? entry.xdr
-            : result
+        for (let index = 0; index < entries.length; index += 1) {
+          const entry = entries[index]
+          if (!activeDecoderWorker) {
+            continue
+          }
+
+          try {
+            const result = await activeDecoderWorker.decodeScVal({
+              xdr: entry.xdr,
+            })
+            if (isDecoderWorkerError(result)) {
+              decodedValuesByKey[entry.key] = entry.xdr
+              decodeErrorReasonsByKey[entry.key] =
+                result.message || 'Decoder failed'
+            } else {
+              decodedValuesByKey[entry.key] = result
+            }
+          } catch (error) {
+            decodedValuesByKey[entry.key] = entry.xdr
+            decodeErrorReasonsByKey[entry.key] = getDecoderFailureReason(error)
+            terminateDecoderWorkerSafe(activeDecoderWorker)
+            activeDecoderWorker = null
+
+            if (isRequestStale()) {
+              return
+            }
+            if (index < entries.length - 1) {
+              activeDecoderWorker = await createDecoderWorkerSafe()
+            }
+          }
         }
 
         if (isRequestStale()) {
@@ -330,6 +380,7 @@ const createContractLoadSlice = (
           contractId,
           entries,
           decodedValuesByKey,
+          decodeErrorReasonsByKey,
         })
 
         set(() => ({
@@ -353,6 +404,9 @@ const createContractLoadSlice = (
             error instanceof Error ? error.message : 'Failed to load contract',
         }))
       } finally {
+        if (activeDecoderWorker) {
+          terminateDecoderWorkerSafe(activeDecoderWorker)
+        }
         if (activeController === controller) {
           activeController = null
         }
@@ -476,10 +530,10 @@ export const useLensStore = create<LensStore>()(
       storage: createSafeStorage<PersistedState>(),
       // Persist networkConfig, preferences, and the watchlist
       partialize: (state): PersistedState => ({
-          networkConfig: serializeNetworkConfigForStorage(state.networkConfig),
-          preferences: state.preferences,
-          watchlist: state.watchlist,
-        }),
+        networkConfig: serializeNetworkConfigForStorage(state.networkConfig),
+        preferences: state.preferences,
+        watchlist: state.watchlist,
+      }),
       // Validate and merge persisted data safely
       merge: (persistedState, currentState) => {
         const mergedNetwork = mergeNetworkConfig(persistedState, currentState)
@@ -579,7 +633,8 @@ export const lensActions = {
     useLensStore.getState().setContractLoadStatus(status),
   setContractLoadError: (message: string | null) =>
     useLensStore.getState().setContractLoadError(message),
-  resetContractLoadState: () => useLensStore.getState().resetContractLoadState(),
+  resetContractLoadState: () =>
+    useLensStore.getState().resetContractLoadState(),
   loadContract: (contractId: string, keys: Array<string>) =>
     useLensStore.getState().loadContract(contractId, keys),
   addSnapshot: (

@@ -9,8 +9,45 @@ import {
 import { ContractLoadStatus } from '../../../store/types'
 import { useLensStore } from '../../../store/lensStore'
 import { validateContractRouteParam } from './-validateContractRouteParam'
+import type { LedgerEntry } from '../../../store/types'
 import type { FlattenTreeRoot } from '../../../lib/tree/flatTreeRow'
 import type { Node } from '../../../types/node'
+
+export function DecodeFallbackList({
+  entries,
+}: {
+  entries: Array<LedgerEntry>
+}) {
+  if (entries.length === 0) {
+    return null
+  }
+
+  return (
+    <section aria-label="Decode fallbacks" className="space-y-3">
+      <Heading
+        size="sm"
+        as="h3"
+        className="text-text-muted uppercase tracking-widest text-[11px] font-bold"
+      >
+        Raw XDR fallbacks
+      </Heading>
+      {entries.map((entry) => (
+        <div
+          key={entry.key}
+          className="border-t border-border-dark pt-3 space-y-2"
+        >
+          <p className="text-xs font-mono text-white break-all">{entry.key}</p>
+          <p className="text-xs text-amber-300">
+            Decode fallback: {entry.decodeErrorReason}
+          </p>
+          <code className="block text-xs text-text-secondary font-mono break-all">
+            {entry.rawXdr}
+          </code>
+        </div>
+      ))}
+    </section>
+  )
+}
 
 function isNodeLike(value: unknown): value is Node {
   return (
@@ -47,7 +84,9 @@ function ContractExplorer() {
   const setContractLoadStatus = useLensStore(
     (state) => state.setContractLoadStatus,
   )
-  const setContractLoadError = useLensStore((state) => state.setContractLoadError)
+  const setContractLoadError = useLensStore(
+    (state) => state.setContractLoadError,
+  )
   const loadContract = useLensStore((state) => state.loadContract)
   const contractLoadStatus = useLensStore((state) => state.contractLoadStatus)
   const contractLoadError = useLensStore((state) => state.contractLoadError)
@@ -65,13 +104,17 @@ function ContractExplorer() {
     )
     return entries.sort((a, b) => a.key.localeCompare(b.key))
   }, [ledgerData, contractId])
+  const decodeFallbackEntries = useMemo(
+    () => ledgerEntries.filter((entry) => entry.decodeErrorReason),
+    [ledgerEntries],
+  )
 
   const snapshots = useLensStore((state) => state.snapshots[contractId] ?? [])
   const addSnapshot = useLensStore((state) => state.addSnapshot)
 
   const handleCaptureSnapshot = () => {
     if (ledgerEntries.length === 0) return
-    const entriesDict: Record<string, typeof ledgerEntries[0]> = {}
+    const entriesDict: Record<string, (typeof ledgerEntries)[0]> = {}
     ledgerEntries.forEach((entry) => {
       entriesDict[entry.key] = entry
     })
@@ -292,6 +335,8 @@ function ContractExplorer() {
                 onActivateRow={(row) => handleActivateRow(row.keyPath)}
               />
             )}
+
+            <DecodeFallbackList entries={decodeFallbackEntries} />
           </div>
         </Card>
       )}

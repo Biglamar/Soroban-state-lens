@@ -36,11 +36,20 @@ export default function NetworkSelector() {
   const [isHydrated, setIsHydrated] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const connectionTestController = useRef<AbortController | null>(null)
 
   const networkConfig = useLensStore((state) => state.networkConfig)
   const lastCustomUrl = useLensStore((state) => state.lastCustomUrl)
   const setNetworkConfig = useLensStore((state) => state.setNetworkConfig)
   const setLastCustomUrl = useLensStore((state) => state.setLastCustomUrl)
+
+  useEffect(
+    () => () => {
+      connectionTestController.current?.abort()
+      connectionTestController.current = null
+    },
+    [],
+  )
 
   // Hydration effect: initialize state from persisted storage
   useEffect(() => {
@@ -86,8 +95,16 @@ export default function NetworkSelector() {
     NETWORK_OPTIONS.find((opt) => opt.id === 'custom')!
 
   // Initialize custom URL and passphrase when switching to custom mode
+  const abortCustomConnectionTest = () => {
+    connectionTestController.current?.abort()
+    connectionTestController.current = null
+    setTestStatus('idle')
+    setTestError('')
+  }
+
   const handleSelect = (option: NetworkInfo) => {
     if (option.config) {
+      abortCustomConnectionTest()
       // Preset network: clear any custom URL usage and close everything
       setNetworkConfig(option.config)
       setShowCustomInput(false)
@@ -97,7 +114,10 @@ export default function NetworkSelector() {
       setIsOpen(false)
     } else {
       // Custom: restore last custom URL or set up for new input
-      const urlToUse = lastCustomUrl || (networkConfig.networkId === 'custom' ? networkConfig.rpcUrl : '') || ''
+      const urlToUse =
+        lastCustomUrl ||
+        (networkConfig.networkId === 'custom' ? networkConfig.rpcUrl : '') ||
+        ''
       const passphraseToUse =
         networkConfig.networkId === 'custom'
           ? networkConfig.networkPassphrase || ''
@@ -126,6 +146,7 @@ export default function NetworkSelector() {
   const handleApplyCustomUrl = () => {
     const validation = validateRpcUrl(customRpcUrl)
     if (validation.isValid) {
+      abortCustomConnectionTest()
       setNetworkConfig({
         networkId: 'custom',
         rpcUrl: customRpcUrl.trim(),
@@ -149,17 +170,40 @@ export default function NetworkSelector() {
     setTestStatus('loading')
     setTestError('')
 
-    const result = await testRpcConnection(customRpcUrl.trim())
+    const controller = new AbortController()
+    connectionTestController.current = controller
+    try {
+      const result = await testRpcConnection(
+        customRpcUrl.trim(),
+        controller.signal,
+      )
 
-    if (result.success) {
-      setTestStatus('success')
-    } else {
-      setTestStatus('error')
-      setTestError(result.error || 'Connection failed')
+      if (controller.signal.aborted) {
+        return
+      }
+
+      if (result.success) {
+        setTestStatus('success')
+      } else {
+        setTestStatus('error')
+        setTestError(result.error || 'Connection failed')
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setTestStatus('error')
+        setTestError(
+          error instanceof Error ? error.message : 'Connection failed',
+        )
+      }
+    } finally {
+      if (connectionTestController.current === controller) {
+        connectionTestController.current = null
+      }
     }
   }
 
   const handleCancelCustom = () => {
+    abortCustomConnectionTest()
     // If we were never on a valid custom network, fall back to testnet
     const fallback = lastCustomUrl
       ? undefined // stay on custom with last applied URL
@@ -349,6 +393,16 @@ export default function NetworkSelector() {
                   </span>
                   {testError}
                 </p>
+              )}
+
+              {testStatus === 'error' && (
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  className="text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+                >
+                  Retry
+                </button>
               )}
 
               {testStatus === 'success' && (

@@ -6,6 +6,7 @@ interface MapLedgerEntriesParams {
   contractId: string
   entries: Array<RpcLedgerEntry>
   decodedValuesByKey?: Record<string, unknown>
+  decodeErrorReasonsByKey?: Record<string, string>
 }
 
 function inferLedgerEntryType(key: string): StoreLedgerEntry['type'] {
@@ -35,12 +36,18 @@ function inferLedgerEntryType(key: string): StoreLedgerEntry['type'] {
 export function mapLedgerEntriesToStoreEntries(
   params: MapLedgerEntriesParams,
 ): Array<StoreLedgerEntry> {
-  const { contractId, entries, decodedValuesByKey = {} } = params
+  const {
+    contractId,
+    entries,
+    decodedValuesByKey = {},
+    decodeErrorReasonsByKey = {},
+  } = params
 
   return entries
-    .filter((entry) => typeof entry?.key === 'string' && entry.key.trim() !== '')
+    .filter((entry) => typeof entry.key === 'string' && entry.key.trim() !== '')
     .map((entry) => {
       const type = inferLedgerEntryType(entry.key)
+      const decodeErrorReason = decodeErrorReasonsByKey[entry.key]
 
       return {
         key: makeLedgerEntryKey(contractId, type, entry.key),
@@ -53,6 +60,7 @@ export function mapLedgerEntriesToStoreEntries(
         lastModifiedLedger: entry.lastModifiedLedgerSeq ?? 0,
         expirationLedger: entry.liveUntilLedgerSeq,
         rawXdr: entry.xdr,
+        ...(decodeErrorReason ? { decodeErrorReason } : {}),
       }
     })
 }
