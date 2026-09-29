@@ -200,8 +200,7 @@ export const Route = createFileRoute('/contracts/$contractId/discovery')({
 
 export function DiscoveryRoute() {
   const { contractId } = Route.useParams()
-  const { normalizedContractId, discoveryLoadState } = Route.useRouteContext()
-  const navigate = Route.useNavigate()
+  const { normalizedContractId } = Route.useRouteContext()
   const addToWatchlist = useLensStore((state) => state.addToWatchlist)
   const rpcUrl = useLensStore((state) => state.networkConfig.rpcUrl)
   const [functionName, setFunctionName] = useState('')
