@@ -489,16 +489,22 @@ const deduplicateWatchlistItems = (
   items: Array<WatchlistItem> | undefined,
 ): Array<WatchlistItem> => {
   const seen = new Set<string>()
-  return (items ?? []).filter((item) => {
-    if (typeof item.keyPath !== 'string' || item.keyPath.length === 0) {
-      return false
-    }
-    if (seen.has(item.keyPath)) {
-      return false
-    }
-    seen.add(item.keyPath)
-    return true
-  })
+  return [...(items ?? [])]
+    .sort(
+      (left, right) =>
+        right.timestamp - left.timestamp ||
+        left.keyPath.localeCompare(right.keyPath),
+    )
+    .filter((item) => {
+      if (typeof item.keyPath !== 'string' || item.keyPath.length === 0) {
+        return false
+      }
+      if (seen.has(item.keyPath)) {
+        return false
+      }
+      seen.add(item.keyPath)
+      return true
+    })
 }
 
 const createWatchlistSlice = (

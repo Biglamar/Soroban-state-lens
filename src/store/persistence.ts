@@ -125,7 +125,11 @@ function unwrapPersistedState(
   const persisted = persistedState as Record<string, unknown>
   const version = getPersistedStateVersion(persistedState)
 
-  if (version !== null && version !== 0 && version !== PERSISTED_STATE_VERSION) {
+  if (
+    version !== null &&
+    version !== 0 &&
+    version !== PERSISTED_STATE_VERSION
+  ) {
     return null
   }
 
@@ -274,7 +278,11 @@ export function sanitizeWatchlist(
     }
 
     if (validItems.length > 0) {
-      sanitized[contractId] = validItems
+      sanitized[contractId] = validItems.sort(
+        (left, right) =>
+          right.timestamp - left.timestamp ||
+          left.keyPath.localeCompare(right.keyPath),
+      )
     }
   }
 
