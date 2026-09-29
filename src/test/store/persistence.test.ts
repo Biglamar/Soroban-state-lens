@@ -5,10 +5,14 @@ import {
   clearPersistedNetworkConfig,
   isValidNetworkConfig,
   mergeNetworkConfig,
+  sanitizeSnapshots,
   sanitizeWatchlist,
   serializeNetworkConfigForStorage,
 } from '../../store/persistence'
-import { DEFAULT_NETWORKS } from '../../store/types'
+import {
+  DEFAULT_NETWORKS,
+  DEFAULT_SNAPSHOT_RETENTION_LIMIT,
+} from '../../store/types'
 import { useLensStore } from '@/store/lensStore'
 
 // Simple localStorage mock for node environment
@@ -410,6 +414,48 @@ describe('persistence', () => {
     it('omits contracts whose items all failed validation', () => {
       const result = sanitizeWatchlist({ C1: [{ bad: true }] })
       expect(result).toEqual({})
+    })
+  })
+
+  describe('sanitizeSnapshots', () => {
+    it('drops malformed snapshots, sanitizes entries, and retains only the newest bounded set', () => {
+      const items = Array.from(
+        { length: DEFAULT_SNAPSHOT_RETENTION_LIMIT + 3 },
+        (_, index) => ({
+          id: `snapshot-${index}`,
+          contractId: 'C1',
+          timestamp: index + 1,
+          ledgerSequence: index,
+          ledgerData: {
+            key1: {
+              key: 'key1',
+              contractId: 'C1',
+              type: 'ContractData',
+              value: { count: index },
+              lastModifiedLedger: index,
+            },
+            invalid: {
+              key: 'wrong-key',
+              contractId: 'C1',
+              type: 'ContractData',
+              value: null,
+              lastModifiedLedger: index,
+            },
+          },
+        }),
+      )
+
+      const sanitized = sanitizeSnapshots({
+        C1: [
+          ...items,
+          { id: 'future', contractId: 'C1', timestamp: Date.now() + 1000 },
+          { id: 'bad-ledger', contractId: 'C1', timestamp: 1, ledgerData: [] },
+        ],
+      })
+
+      expect(sanitized.C1).toHaveLength(DEFAULT_SNAPSHOT_RETENTION_LIMIT)
+      expect(sanitized.C1[0].id).toBe('snapshot-3')
+      expect(Object.keys(sanitized.C1[0].ledgerData)).toEqual(['key1'])
     })
   })
 

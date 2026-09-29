@@ -252,7 +252,8 @@ describe('lensStore', () => {
 
   describe('watchlist actions', () => {
     it('ignores blank contract ids and key paths', () => {
-      const { addToWatchlist, getWatchlistForContract } = useLensStore.getState()
+      const { addToWatchlist, getWatchlistForContract } =
+        useLensStore.getState()
 
       addToWatchlist('   ', ' /path/to/key ')
       addToWatchlist('contract-1', '   ')
@@ -263,7 +264,8 @@ describe('lensStore', () => {
     })
 
     it('trims values before duplicate checks and storage', () => {
-      const { addToWatchlist, getWatchlistForContract } = useLensStore.getState()
+      const { addToWatchlist, getWatchlistForContract } =
+        useLensStore.getState()
 
       addToWatchlist('contract-1', '  /path/to/key  ')
       addToWatchlist('contract-1', '/path/to/key')
@@ -282,24 +284,28 @@ describe('lensStore', () => {
       expect(getStoreState().selectedKeyPath).toBe('contract.entry-0-value')
     })
 
-    it('setActiveContractId clears previous selected path and snapshots for prior contract', () => {
+    it('setActiveContractId clears selection while retaining prior snapshots', () => {
       const { addSnapshot, setSelectedKeyPath, setActiveContractId } =
         useLensStore.getState()
 
-      addSnapshot('old-contract', {
-        a: {
-          key: 'a',
-          contractId: 'old-contract',
-          type: 'ContractData',
-          value: { ok: true },
-          lastModifiedLedger: 1,
+      addSnapshot(
+        'old-contract',
+        {
+          a: {
+            key: 'a',
+            contractId: 'old-contract',
+            type: 'ContractData',
+            value: { ok: true },
+            lastModifiedLedger: 1,
+          },
         },
-      }, 0)
+        0,
+      )
       setSelectedKeyPath('contract.entry-0-value')
       setActiveContractId('new-contract')
 
       expect(getStoreState().selectedKeyPath).toBeNull()
-      expect(getStoreState().snapshots['old-contract']).toBeUndefined()
+      expect(getStoreState().snapshots['old-contract']).toHaveLength(1)
       expect(getStoreState().activeContractId).toBe('new-contract')
     })
 
