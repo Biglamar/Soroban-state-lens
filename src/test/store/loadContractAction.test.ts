@@ -345,4 +345,122 @@ describe('loadContract action', () => {
       state.ledgerData['C_DECODE_STALE::Other::middle-key'],
     ).toBeUndefined()
   })
+
+  describe('refreshActiveKeys action', () => {
+    it('does nothing when there is no active contract', async () => {
+      const { resetStore, useLensStore } = await import('../../store/lensStore')
+      resetStore()
+
+      await useLensStore.getState().refreshActiveKeys()
+      expect(mockGetLedgerEntries).not.toHaveBeenCalled()
+    })
+
+    it('does nothing when there are no keys for the active contract', async () => {
+      const { resetStore, useLensStore } = await import('../../store/lensStore')
+      resetStore()
+
+      useLensStore.setState({ activeContractId: 'C1', ledgerData: {} })
+
+      await useLensStore.getState().refreshActiveKeys()
+      expect(mockGetLedgerEntries).not.toHaveBeenCalled()
+    })
+
+    it('avoids duplicate in-flight work when a load is already active', async () => {
+      const { resetStore, useLensStore } = await import('../../store/lensStore')
+      resetStore()
+
+      useLensStore.setState({
+        activeContractId: 'C1',
+        ledgerData: {
+          'C1::Other::rpc-key-1': {
+            key: 'C1::Other::rpc-key-1',
+            contractId: 'C1',
+            type: 'Other',
+            value: null,
+            lastModifiedLedger: 1,
+            rawXdr: 'xdr',
+          },
+        },
+      })
+
+      let resolveFirst: ((value: any) => void) | undefined
+      mockGetLedgerEntries.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirst = resolve
+        }),
+      )
+
+      const loadPromise = useLensStore.getState().loadContract('C1', ['rpc-key-1'])
+      await useLensStore.getState().refreshActiveKeys()
+
+      expect(mockGetLedgerEntries).toHaveBeenCalledTimes(1)
+
+      if (resolveFirst) {
+        resolveFirst({ entries: [], latestLedger: 2 })
+      }
+      await loadPromise
+    })
+
+    it('emits sequence changes and counts fetches correctly on refresh', async () => {
+      const { resetStore, getStoreState, useLensStore } = await import(
+        '../../store/lensStore'
+      )
+      resetStore()
+
+      useLensStore.setState({
+        activeContractId: 'C_REFRESH',
+        currentLedgerSequence: 100,
+        ledgerData: {
+          'C_REFRESH::Other::rpc-key-1': {
+            key: 'C_REFRESH::Other::rpc-key-1',
+            contractId: 'C_REFRESH',
+            type: 'Other',
+            value: null,
+            lastModifiedLedger: 90,
+            rawXdr: 'xdr-1',
+          },
+          'C_REFRESH::Other::rpc-key-2': {
+            key: 'C_REFRESH::Other::rpc-key-2',
+            contractId: 'C_REFRESH',
+            type: 'Other',
+            value: null,
+            lastModifiedLedger: 95,
+            rawXdr: 'xdr-2',
+          },
+        },
+      })
+
+      mockGetLedgerEntries.mockResolvedValueOnce({
+        entries: [
+          { key: 'rpc-key-1', xdr: 'xdr-1-new', lastModifiedLedgerSeq: 101 },
+          { key: 'rpc-key-2', xdr: 'xdr-2-new', lastModifiedLedgerSeq: 101 },
+        ],
+        latestLedger: 105,
+      })
+
+      mockDecodeScVal.mockResolvedValue({
+        kind: 'primitive',
+        path: [],
+        scType: 'string',
+        value: 'decoded-new',
+        raw: { switch: 'ScvString', value: 'decoded-new' },
+      })
+
+      await useLensStore.getState().refreshActiveKeys()
+
+      expect(mockGetLedgerEntries).toHaveBeenCalledTimes(1)
+      expect(mockGetLedgerEntries).toHaveBeenCalledWith(
+        expect.objectContaining({ keys: ['rpc-key-1', 'rpc-key-2'] }),
+      )
+
+      const state = getStoreState()
+      expect(state.currentLedgerSequence).toBe(105)
+      expect(state.ledgerData['C_REFRESH::Other::rpc-key-1'].rawXdr).toBe(
+        'xdr-1-new',
+      )
+      expect(state.ledgerData['C_REFRESH::Other::rpc-key-2'].rawXdr).toBe(
+        'xdr-2-new',
+      )
+    })
+  })
 })

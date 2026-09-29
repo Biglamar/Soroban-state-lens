@@ -478,6 +478,35 @@ const createContractLoadSlice = (
         }
       }
     },
+
+    refreshActiveKeys: async () => {
+      const state = get()
+      const contractId = state.activeContractId
+
+      if (!contractId) {
+        return
+      }
+
+      if (activeController !== null) {
+        return // Avoid duplicate in-flight work
+      }
+
+      // Collect raw RPC keys from the currently cached ledger entries for the active contract
+      const rpcKeys = Object.values(state.ledgerData)
+        .filter((entry) => entry.contractId === contractId)
+        .map((entry) => {
+          // Store keys are formatted as contractId::entryType::rpcKey
+          const parts = entry.key.split('::')
+          return parts[2]
+        })
+        .filter((key): key is string => Boolean(key))
+
+      if (rpcKeys.length === 0) {
+        return
+      }
+
+      await state.loadContract(contractId, rpcKeys)
+    },
   }
 }
 
@@ -741,6 +770,7 @@ export const lensActions = {
     useLensStore.getState().resetContractLoadState(),
   loadContract: (contractId: string, keys: Array<string>) =>
     useLensStore.getState().loadContract(contractId, keys),
+  refreshActiveKeys: () => useLensStore.getState().refreshActiveKeys(),
   addSnapshot: (
     contractId: string,
     entries: Record<string, LedgerEntry>,
