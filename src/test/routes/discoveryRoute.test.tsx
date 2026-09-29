@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { RouterProvider, createRouter } from '@tanstack/react-router'
+import { RouterProvider, createRouter } from '@tanstack/router-react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { routeTree } from '../../routeTree.gen'
 import { resetStore, useLensStore } from '../../store/lensStore'
@@ -21,11 +21,16 @@ interface JsonRpcRequest {
   method: string
 }
 
-function getRpcRequests(method: string) {
+function getRpcPayloads(method: string) {
   return vi.mocked(fetch).mock.calls.filter(([, init]) => {
     const request = JSON.parse(String(init?.body)) as JsonRpcRequest
     return request.method === method
   })
+}
+
+function getRpcPayload(method: string) {
+  const calls = getRpcPayloads(method)
+  return calls.length > 0 ? calls[calls.length - 1] : undefined
 }
 
 function mockRpcResponse(
@@ -90,7 +95,7 @@ describe('Discovery route', () => {
       screen.getByRole('button', { name: 'Simulate transaction' }),
     )
 
-    expect(getRpcRequests('simulateTransaction')).toHaveLength(0)
+    expect(getRpcPayloads('simulateTransaction')).toHaveLength(0)
     expect(
       screen.getByLabelText('Function name').getAttribute('aria-invalid'),
     ).toBe('true')
@@ -106,7 +111,7 @@ describe('Discovery route', () => {
     )
 
     expect(await screen.findByText('Transaction XDR is required.')).toBeTruthy()
-    expect(getRpcRequests('simulateTransaction')).toHaveLength(0)
+    expect(getRpcPayloads('simulateTransaction')).toHaveLength(0)
   })
 
   it('simulates the transaction and displays normalized discovered keys', async () => {
@@ -128,10 +133,10 @@ describe('Discovery route', () => {
       screen.getByRole('button', { name: 'Simulate transaction' }),
     )
 
-    expect(await screen.findByText('read-key')).toBetTruthy()
+    expect(await screen.findByText('read-key')).toBeTruthy()
     expect(screen.getByText('write-key')).toBeTruthy()
-    expect(screen.getByText('Read-only')).toBetTruthy()
-    expect(screen.getByText('Read-write')).toBetTruthy()
+    expect(screen.getByText('Read-only')).toBeTruthy()
+    expect(screen.getByText('Read-write')).toBeTruthy()
     expect(useLensStore.getState().networkConfig.rpcUrl).toBeTruthy()
 
     fireEvent.click(
@@ -162,8 +167,8 @@ describe('Discovery route', () => {
     )
 
     expect(
-      await screen.findByText('RPC Error (-10000): Simulation failed'),
-    ).toBetTruthy()
+      await screen.findByText('RPC Error (-32000): Simulation failed'),
+    ).toBeTruthy()
     expect(screen.getByLabelText('Function name')).toHaveProperty(
       'value',
       'read_state',
@@ -181,14 +186,14 @@ describe('Discovery route', () => {
     ).toBeNull()
   })
 
-  it('shows auth failures as actionable discovery messages', async () => {
+  it('maps common authorization failures to actionable discovery messages', async () => {
     mockRpcResponse((request) =>
       request.method === 'getLatestLedger'
         ? { result: { sequence: 123 } }
         : {
             error: {
-              code: -32000,
-              message: 'Not authorized to submit this transaction',
+              code: -32001,
+              message: 'Unauthorized: invalid auth token',
             },
           },
     )
@@ -198,16 +203,60 @@ describe('Discovery route', () => {
       screen.getByRole('button', { name: 'Simulate transaction' }),
     )
 
-    const alert = await screen.findByText(
-      'Authorization failed. Add the required signer to the transaction and retry.',
+    expect(
+      await screen.findByText(
+        'Authorization failed: check your RPC credentials and try again.',
+      ),
+    ).toBeTruthy()
+    expect(screen.queryByText('RPC Error (-32001)')).toBeNull()
+  })
+
+  it('maps expired authorization to an actionable discovery message', async () => {
+    mockRpcResponse((request) =>
+      request.method === 'getLatestLedger'
+        ? { result: { sequence: 123 } }
+        : {
+            error: {
+              code: -32002,
+              message: 'Auth token has expired',
+            },
+          },
     )
-    expect(alert).toBeTruthy()
+    renderDiscoveryRoute()
+    await fillValidForm()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Simulate transaction' }),
+    )
+
     expect(
-      screen.queryByText('RPC Error (-32000): Not authorized to submit this transaction'),
-    ).toBeNull()
+      await screen.findByText(
+        'Authorization expired: refresh your RPC credentials and try again.',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('maps missing authorization to an actionable discovery message', async () => {
+    mockRpcResponse((request) =>
+      request.method === 'getLatestLedger'
+        ? { result: { sequence: 123 } }
+        : {
+            error: {
+              code: -32003,
+              message: 'Missing authorization header',
+            },
+          },
+    )
+    renderDiscoveryRoute()
+    await fillValidForm()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Simulate transaction' }),
+    )
+
     expect(
-      screen.queryByText('No keys found in the transaction footprint.'),
-    ).toBeNull()
+      await screen.findByText(
+        'Authorization required: add your RPC credentials and try again.',
+      ),
+    ).toBeTruthy()
   })
 
   it('aborts a pending simulation when the route unmounts', async () => {
@@ -235,9 +284,9 @@ describe('Discovery route', () => {
       screen.getByRole('button', { name: 'Simulate transaction' }),
     )
     await waitFor(() =>
-      expect(getRpcRequests('simulateTransaction')).toHaveLength(1),
+      expect(getRpcPayloads('simulateTransaction')).toHaveLength(1),
     )
-    const [, init] = getRpcRequests('simulateTransaction')[0]
+    const [, init] = getRpcPayloads('simulateTransaction')[0]
     const signal = init?.signal as AbortSignal
 
     view.unmount()

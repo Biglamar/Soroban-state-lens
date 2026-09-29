@@ -10,7 +10,7 @@ import { toRpcRequestId } from '../rpc/toRpcRequestId'
 import { callRpc } from './rpcClient'
 import type { RpcError } from './types'
 
-export interface SimulateTransactionParams+ {
+export interface SimulateTransactionParams+
   rpcUrl: string
   /** Base64 transaction envelope XDR to simulate. */
   transaction: string
@@ -44,7 +44,7 @@ export interface SimulateTransactionResult {
   error?: string
 }
 
-const activeSimulationControllers = new Map<string, AbortController>()
+const activeSimulationControllers= new Map<string, AbortController>()
 
 const abortedSimulationResult: SimulateTransactionResult = {
   success: false,
@@ -70,44 +70,45 @@ function isRpcError(value: unknown): value is RpcError {
 }
 
 /**
- * Maps common auth failures from a simulation error message into a
- * concise, actionable discovery message. Returns `null` when the message
- * does not match a known auth failure so callers can fall back to the
- * original text.
+ * Maps common auth failure messages to concise, actionable discovery messages.
+ * Returns the original message when no auth failure pattern matches.
  */
-export function mapSimulationAuthError(message: string): string | null {
-  if (typeof message !== 'string' || message.trim().length === 0) {
-    return null
-  }
-
+export function mapSimulationAuthError(message: string): string {
   const normalized = message.toLowerCase()
 
   if (
-    normalized.includes('not authorized') ||
-    normalized.includes('unauthorized') ||
-    normalized.includes('auth failed') ||
-    normalized.includes('authentication failed')
+    normalized.includes('invalid auth') ||
+    normalized.includes('auth entry is invalid') ||
+    normalized.includes('unsupported auth')
   ) {
-    return 'Authorization failed. Add the required signer to the transaction and retry.'
+    return 'Authorization entry is invalid. Regenerate the auth entry and simulate again.'
   }
 
-  if (normalized.includes('missing signature')) {
-    return 'Missing signature. Sign the transaction with the required key and retry.'
+  if (
+    normalized.includes('missing auth') ||
+    normalized.includes('auth entry not found') ||
+    normalized.includes('no auth entry')
+  ) {
+    return 'Authorization entry is missing. Add the required auth entry and simulate again.'
   }
 
-  if (normalized.includes('signature invalid') || normalized.includes('invalid signature')) {
-    return 'Invalid signature. Resign the transaction with the correct key and retry.'
+  if (
+    normalized.includes('auth failed') ||
+    normalized.includes('failed to authorize') ||
+    normalized.includes('authorization failed')
+  ) {
+    return 'Authorization failed. Check the signer and auth entry, then simulate again.'
   }
 
-  if (normalized.includes('expired')) {
-    return 'Authorization expired. Refresh the auth entry and retry.'
+  if (
+    normalized.includes('signature verification failed') ||
+    normalized.includes('invalid signature') ||
+    normalized.includes('signature is invalid')
+  ) {
+    return 'Authorization signature is invalid. Resign the auth entry and simulate again.'
   }
 
-  if (normalized.includes('trustline')) {
-    return 'Trustline authorization failed. Add the required trustline and retry.'
-  }
-
-  return null
+  return message
 }
 
 /**
@@ -121,10 +122,7 @@ export function simulateTransactionAdapter(
   }
 
   if (response.error) {
-    return {
-      success: false,
-      error: mapSimulationAuthError(response.error) ?? response.error,
-    }
+    return { success: false, error: mapSimulationAuthError(response.error) }
   }
 
   const latestLedger =
@@ -209,21 +207,19 @@ async function performSimulationRequest(
     if (data.code === 'ABORTED') {
       return { success: false, error: 'Request aborted' }
     }
-    const rawMessage =
+    const message =
       data.code === 'NETWORK_ERROR' && typeof data.details === 'string'
         ? data.details
         : data.message
-    return {
-      success: false,
-      error: mapSimulationAuthError(rawMessage) ?? rawMessage,
-    }
+    return { success: false, error: mapSimulationAuthError(message) }
   }
 
   if (isJsonRpcErrorResponse(data, requestId)) {
-    const mapped = mapSimulationAuthError(data.error.message)
     return {
       success: false,
-      error: mapped ?? `RPC Error (${data.error.code}): ${data.error.message}`,
+      error: mapSimulationAuthError(
+        `RPC Error (${data.error.code}): ${data.error.message}`,
+      ),
     }
   }
 
