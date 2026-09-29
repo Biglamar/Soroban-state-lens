@@ -83,7 +83,7 @@ export function TreeRow({
   return (
     <div
       ref={rowRef}
-      role="button"
+      role="treeitem"
       tabIndex={tabIndex}
       data-testid="tree-row"
       onClick={() => onActivate?.(row)}
@@ -94,9 +94,14 @@ export function TreeRow({
       }`}
       style={{ height: rowHeight }}
       aria-label={`Open ${row.label}`}
+      aria-level={row.depth + 1}
+      aria-selected={isSelected}
       aria-expanded={row.hasChildren ? isExpanded : undefined}
     >
-      <div style={{ marginLeft: row.depth * 16 }} className="flex items-center gap-2 min-w-0">
+      <div
+        style={{ marginLeft: row.depth * 16 }}
+        className="flex items-center gap-2 min-w-0"
+      >
         {row.hasChildren ? (
           <button
             type="button"
@@ -113,7 +118,9 @@ export function TreeRow({
           <span className="w-4" aria-hidden="true" />
         )}
 
-        <span className="font-mono text-xs text-white truncate">{row.label}</span>
+        <span className="font-mono text-xs text-white truncate">
+          {row.label}
+        </span>
         <span className="font-mono text-[10px] uppercase text-primary border border-primary/30 rounded px-1 py-0.5">
           {typeBadge(row)}
         </span>

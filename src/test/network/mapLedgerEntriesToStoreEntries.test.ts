@@ -59,6 +59,20 @@ describe('mapLedgerEntriesToStoreEntries', () => {
     ])
   })
 
+  it('normalizes padded and lowercase contract IDs before mapping', () => {
+    const canonical = mapLedgerEntriesToStoreEntries({
+      contractId: 'CONTRACT_1',
+      entries: [{ key: 'ledger-key-1', xdr: 'xdr-1' }],
+    })
+    const padded = mapLedgerEntriesToStoreEntries({
+      contractId: '  contract_1  ',
+      entries: [{ key: 'ledger-key-1', xdr: 'xdr-1' }],
+    })
+
+    expect(padded).toEqual(canonical)
+    expect(padded[0].contractId).toBe('CONTRACT_1')
+  })
+
   it('falls back safely when optional metadata is missing', () => {
     const result = mapLedgerEntriesToStoreEntries({
       contractId: 'CONTRACT_2',

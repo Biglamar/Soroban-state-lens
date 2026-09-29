@@ -62,6 +62,55 @@ describe('InspectShell', () => {
     expect(screen.getByText(storedEntry.rawXdr)).toBeTruthy()
   })
 
+  it('shows the affected key path and expected/actual types for a schema mismatch', () => {
+    useLensStore.setState({
+      watchlist: {},
+      ledgerData: { [storedEntry.key]: storedEntry },
+      contractSpecMismatches: {
+        C123: [
+          {
+            keyPath: '/state/ledger',
+            expectedType: 'i128',
+            actualType: 'symbol',
+          },
+        ],
+      },
+    })
+
+    render(
+      <InspectShell
+        contractId="C123"
+        normalizedContractId="C123"
+        keyPath="/state/ledger"
+      />,
+    )
+
+    expect(screen.getByRole('alert')).toBeTruthy()
+    expect(screen.getByText('Schema mismatch')).toBeTruthy()
+    expect(screen.getByText('Key path: /state/ledger')).toBeTruthy()
+    expect(screen.getByText('i128')).toBeTruthy()
+    expect(screen.getByText('symbol')).toBeTruthy()
+  })
+
+  it('keeps the inspector clear when schema comparison finds no mismatch', () => {
+    useLensStore.setState({
+      watchlist: {},
+      ledgerData: { [storedEntry.key]: storedEntry },
+      contractSpecMismatches: { C123: [] },
+    })
+
+    render(
+      <InspectShell
+        contractId="C123"
+        normalizedContractId="C123"
+        keyPath="/state/ledger"
+      />,
+    )
+
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByText('Schema mismatch')).toBeNull()
+  })
+
   it('renders temporary metadata from the matching stored entry', () => {
     useLensStore.setState({
       watchlist: {},
@@ -144,6 +193,34 @@ describe('InspectShell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add to watchlist' }))
 
     expect(addToWatchlist).toHaveBeenCalledWith('C123', '/state/ledger')
+  })
+
+  it('shows feedback when the pinned key already exists', () => {
+    useLensStore.setState({
+      watchlist: {
+        futurenet: {
+          C123: [
+            { contractId: 'C123', keyPath: '/state/ledger', timestamp: 1 },
+          ],
+        },
+      },
+      ledgerData: { [storedEntry.key]: storedEntry },
+    })
+
+    render(
+      <InspectShell
+        contractId="C123"
+        normalizedContractId="C123"
+        keyPath="/state/ledger"
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add to watchlist' }))
+
+    expect(screen.getByRole('status').textContent).toBe('Already in watchlist.')
+    expect(
+      useLensStore.getState().getWatchlistForContract('C123'),
+    ).toHaveLength(1)
   })
 
   it('copies the selected entry raw XDR', async () => {

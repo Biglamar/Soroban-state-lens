@@ -1,4 +1,5 @@
 import { xdr } from '@stellar/stellar-sdk'
+import { normalizeContractIdInput } from '../validation/normalizeContractIdInput'
 import { makeLedgerEntryKey } from '../storage/makeLedgerEntryKey'
 import type { LedgerEntry as RpcLedgerEntry } from './getLedgerEntries'
 import type { LedgerEntry as StoreLedgerEntry } from '../../store/types'
@@ -7,6 +8,7 @@ interface MapLedgerEntriesParams {
   contractId: string
   entries: Array<RpcLedgerEntry>
   decodedValuesByKey?: Record<string, unknown>
+  decodeErrorReasonsByKey?: Record<string, string>
 }
 
 function inferLedgerEntryType(key: string): StoreLedgerEntry['type'] {
@@ -57,7 +59,12 @@ function decodeDurability(key: string): StoreLedgerEntry['durability'] {
 export function mapLedgerEntriesToStoreEntries(
   params: MapLedgerEntriesParams,
 ): Array<StoreLedgerEntry> {
-  const { contractId, entries, decodedValuesByKey = {} } = params
+  const {
+    entries,
+    decodedValuesByKey = {},
+    decodeErrorReasonsByKey = {},
+  } = params
+  const contractId = normalizeContractIdInput(params.contractId)
   return entries.map((entry) => {
     const type = inferLedgerEntryType(entry.key)
     const durability = decodeDurability(entry.key)
@@ -92,6 +99,9 @@ export function mapLedgerEntriesToStoreEntries(
       lastModifiedLedger,
       expirationLedger,
       rawXdr: entry.xdr,
+      ...(decodeErrorReasonsByKey[entry.key]
+        ? { decodeErrorReason: decodeErrorReasonsByKey[entry.key] }
+        : {}),
     }
   })
 }
