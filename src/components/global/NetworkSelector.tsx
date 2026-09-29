@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 import { resetConnectionTestState } from '../../lib/network/connectionTestState'
+import { getLatestLedgerConnectionCheck } from '../../lib/network/getLatestLedger'
 import { testRpcConnection } from '../../lib/network/testConnection'
 import { validateRpcUrl } from '../../lib/network/validation'
 import { useLensStore } from '../../store/lensStore'
@@ -46,6 +47,9 @@ export default function NetworkSelector() {
   const lastCustomUrl = useLensStore((state) => state.lastCustomUrl)
   const setNetworkConfig = useLensStore((state) => state.setNetworkConfig)
   const setLastCustomUrl = useLensStore((state) => state.setLastCustomUrl)
+  const setLatestLedgerSequence = useLensStore(
+    (state) => state.setLatestLedgerSequence,
+  )
 
   const abortCustomConnectionTest = () => {
     currentTestRequestId.current += 1
@@ -115,6 +119,29 @@ export default function NetworkSelector() {
       optionRefs.current[focusedOptionIndex]?.focus()
     }
   }, [focusedOptionIndex])
+
+  // Fetch latest ledger sequence when network config changes
+  useEffect(() => {
+    const controller = new AbortController()
+    setLatestLedgerSequence(null)
+
+    const fetchLatestLedger = async () => {
+      const result = await getLatestLedgerConnectionCheck(
+        networkConfig.rpcUrl,
+        { signal: controller.signal },
+      )
+      if (controller.signal.aborted) return
+
+      if (result.success && result.ledger) {
+        setLatestLedgerSequence(result.ledger.sequence)
+      } else {
+        setLatestLedgerSequence(null)
+      }
+    }
+
+    void fetchLatestLedger()
+    return () => controller.abort()
+  }, [networkConfig.rpcUrl, setLatestLedgerSequence])
 
   // Don't render until hydrated to prevent SSR mismatches
   if (!isHydrated) {
