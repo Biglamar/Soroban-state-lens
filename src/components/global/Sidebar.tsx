@@ -15,7 +15,8 @@ import { downloadSnapshotDiff } from '../../lib/diff/exportSnapshotDiff'
 import { resolveDiffStatus } from '../../lib/diff/resolveDiffStatus'
 import { formatContractIdShort } from '../../lib/format/formatContractIdShort'
 import { formatLedgerSequence } from '../../lib/format/formatLedgerSequence'
-import { useLensStore } from '../../store/lensStore'
+import { useLensStore, useSnapshots } from '../../store/lensStore'
+import type { LedgerEntry } from '../../store/types'
 
 interface SidebarProps {
   open: boolean
@@ -24,7 +25,37 @@ interface SidebarProps {
   activeNavItem?: string
 }
 
-const EMPTY_ARRAY: Array<any> = []
+const EMPTY_LEDGER_ENTRIES: Array<LedgerEntry> = []
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  return (
+    target.isContentEditable ||
+    target.closest('[contenteditable="true"], [role="textbox"]') !== null ||
+    ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+  )
+}
+
+function captureActiveSnapshot(): void {
+  const state = useLensStore.getState()
+  const contractId = state.activeContractId
+  if (!contractId) return
+
+  const entries = Object.values(state.ledgerData)
+    .filter((entry) => entry.contractId === contractId)
+    .sort((left, right) => left.key.localeCompare(right.key))
+  if (entries.length === 0) return
+
+  const ledgerData = Object.fromEntries(
+    entries.map((entry) => [entry.key, entry]),
+  )
+  state.addSnapshot(
+    contractId,
+    ledgerData,
+    state.currentLedgerSequence,
+    `Snapshot #${state.getSnapshots(contractId).length + 1}`,
+  )
+}
 
 export default function Sidebar({
   open,
@@ -38,6 +69,28 @@ export default function Sidebar({
   const activeContractLabel = activeContractId
     ? formatContractIdShort(activeContractId)
     : null
+
+  useEffect(() => {
+    if (isPinned) return
+
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (
+        event.key.toLowerCase() !== 's' ||
+        !event.shiftKey ||
+        (!event.ctrlKey && !event.metaKey) ||
+        event.altKey ||
+        isEditableTarget(event.target)
+      ) {
+        return
+      }
+
+      event.preventDefault()
+      captureActiveSnapshot()
+    }
+
+    document.addEventListener('keydown', handleShortcut)
+    return () => document.removeEventListener('keydown', handleShortcut)
+  }, [isPinned])
 
   // Pinned variant: inline panel
   if (isPinned) {
@@ -236,12 +289,7 @@ export default function Sidebar({
  */
 function HistoryPanel() {
   const activeContractId = useLensStore((state) => state.activeContractId)
-  const allSnapshots = useLensStore((state) => state.snapshots)
-
-  const snapshots = useMemo(() => {
-    if (!activeContractId) return EMPTY_ARRAY
-    return allSnapshots[activeContractId] ?? EMPTY_ARRAY
-  }, [allSnapshots, activeContractId])
+  const snapshots = useSnapshots(activeContractId ?? '')
 
   const addSnapshot = useLensStore((state) => state.addSnapshot)
   const removeSnapshot = useLensStore((state) => state.removeSnapshot)
@@ -252,7 +300,7 @@ function HistoryPanel() {
     (state) => state.currentLedgerSequence,
   )
   const ledgerEntries = useMemo(() => {
-    if (!activeContractId) return EMPTY_ARRAY
+    if (!activeContractId) return EMPTY_LEDGER_ENTRIES
     const entries = Object.values(ledgerData).filter(
       (entry) => entry.contractId === activeContractId,
     )
@@ -311,14 +359,16 @@ function HistoryPanel() {
     let unchanged = 0
 
     for (const key of allKeys) {
+      const hasEntryA = Object.hasOwn(prev.ledgerData, key)
+      const hasEntryB = Object.hasOwn(next.ledgerData, key)
       const entryA = prev.ledgerData[key]
       const entryB = next.ledgerData[key]
 
-      if (entryA === undefined && entryB !== undefined) {
+      if (!hasEntryA && hasEntryB) {
         created++
-      } else if (entryA !== undefined && entryB === undefined) {
+      } else if (hasEntryA && !hasEntryB) {
         deleted++
-      } else if (entryA !== undefined && entryB !== undefined) {
+      } else if (hasEntryA && hasEntryB) {
         const status = resolveDiffStatus(entryA.value, entryB.value)
         if (status === 'changed') {
           modified++
@@ -383,6 +433,8 @@ function HistoryPanel() {
 
           <button
             onClick={handleCapture}
+            aria-keyshortcuts="Control+Shift+S Meta+Shift+S"
+            title="Keyboard shortcut: Ctrl+Shift+S or Command+Shift+S"
             disabled={ledgerEntries.length === 0}
             className={`w-full py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
               ledgerEntries.length === 0
@@ -393,6 +445,9 @@ function HistoryPanel() {
             <PlusCircle size={14} />
             Capture Snapshot
           </button>
+          <p className="text-[10px] text-text-muted text-center">
+            Shortcut: Ctrl/⌘ + Shift + S
+          </p>
 
           {ledgerEntries.length === 0 && (
             <p className="text-[10px] text-amber-500/80 text-center leading-relaxed">
@@ -472,6 +527,8 @@ function HistoryPanel() {
             <div className="pt-2 flex gap-2">
               <button
                 onClick={handleCapture}
+                aria-keyshortcuts="Control+Shift+S Meta+Shift+S"
+                title="Keyboard shortcut: Ctrl+Shift+S or Command+Shift+S"
                 disabled={ledgerEntries.length === 0}
                 className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   ledgerEntries.length === 0

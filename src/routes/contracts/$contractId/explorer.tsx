@@ -9,10 +9,13 @@ import {
 } from '../../../lib/tree/flattenTree'
 import { useContractLedgerPolling } from '../../../lib/network/useContractLedgerPolling'
 import { ContractLoadStatus } from '../../../store/types'
-import { useLensStore } from '../../../store/lensStore'
+import { useLensStore, useSnapshots } from '../../../store/lensStore'
 import { validateContractRouteParam } from './-validateContractRouteParam'
+import type { LedgerEntry } from '../../../store/types'
 import type { FlattenTreeRoot } from '../../../lib/tree/flatTreeRow'
 import type { Node } from '../../../types/node'
+
+const EMPTY_EXPANDED_NODES: Array<string> = []
 
 export function resolveSelectedKeyPath(
   selectedKeyPath: string | null,
@@ -35,6 +38,45 @@ function isNodeLike(value: unknown): value is Node {
     value !== null &&
     'kind' in value &&
     typeof (value as { kind: unknown }).kind === 'string'
+  )
+}
+
+export function DecodeFallbackList({
+  entries,
+}: {
+  entries: Array<LedgerEntry>
+}) {
+  if (entries.length === 0) {
+    return null
+  }
+
+  return (
+    <Card>
+      <section
+        aria-label="Undecoded entries"
+        className="space-y-4 border-t border-border-dark pt-4"
+      >
+        <Heading
+          size="sm"
+          as="h3"
+          className="text-text-muted uppercase tracking-widest text-[11px] font-bold"
+        >
+          Entries not decoded
+        </Heading>
+        <ul className="space-y-3">
+          {entries.map((entry) => (
+            <li key={entry.key} className="space-y-2">
+              <p className="text-sm text-text-muted break-words">
+                {entry.decodeErrorReason || 'Decoder worker failed'}
+              </p>
+              <code className="block rounded bg-surface-dark p-3 text-xs font-mono text-text-secondary break-all">
+                {entry.rawXdr || 'Raw XDR is not available for this entry.'}
+              </code>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </Card>
   )
 }
 
@@ -85,16 +127,27 @@ function ContractExplorer() {
     (state) => state.setContractLoadError,
   )
   const loadContract = useLensStore((state) => state.loadContract)
+  const refreshActiveKeys = useLensStore((state) => state.refreshActiveKeys)
   const contractLoadStatus = useLensStore((state) => state.contractLoadStatus)
   const contractLoadError = useLensStore((state) => state.contractLoadError)
   const contractLoadAttemptCount = useLensStore(
     (state) => state.contractLoadAttemptCount,
   )
   const rpcUrl = useLensStore((state) => state.networkConfig.rpcUrl)
-  const expandedNodes = useLensStore((state) => state.expandedNodes)
-  const toggleExpanded = useLensStore((state) => state.toggleExpanded)
-  const expandAll = useLensStore((state) => state.expandAll)
-  const collapseAll = useLensStore((state) => state.collapseAll)
+  const expandedNodes = useLensStore(
+    (state) =>
+      state.expandedNodesByContract[normalizedContractId] ??
+      EMPTY_EXPANDED_NODES,
+  )
+  const toggleExpandedForContract = useLensStore(
+    (state) => state.toggleExpandedForContract,
+  )
+  const expandAllForContract = useLensStore(
+    (state) => state.expandAllForContract,
+  )
+  const collapseAllForContract = useLensStore(
+    (state) => state.collapseAllForContract,
+  )
   const selectedKeyPath = useLensStore((state) => state.selectedKeyPath)
   const setSelectedKeyPath = useLensStore((state) => state.setSelectedKeyPath)
   const clearSelectedKeyPath = useLensStore(
@@ -111,8 +164,12 @@ function ContractExplorer() {
     )
     return entries.sort((a, b) => a.key.localeCompare(b.key))
   }, [ledgerData, contractId])
+  const decodeFallbackEntries = useMemo(
+    () => ledgerEntries.filter((entry) => entry.decodeErrorReason),
+    [ledgerEntries],
+  )
 
-  const snapshots = useLensStore((state) => state.snapshots[contractId] ?? [])
+  const snapshots = useSnapshots(contractId)
   const addSnapshot = useLensStore((state) => state.addSnapshot)
 
   const handleCaptureSnapshot = () => {
@@ -130,7 +187,7 @@ function ContractExplorer() {
     [search.keys],
   )
 
-  useContractLedgerPolling({ contractId, keys, rpcUrl, loadContract })
+  useContractLedgerPolling({ contractId, keys, rpcUrl, refreshActiveKeys })
 
   const treeRoots = useMemo<Array<FlattenTreeRoot>>(
     () =>
@@ -161,11 +218,11 @@ function ContractExplorer() {
   )
 
   const handleExpandAll = () => {
-    expandAll(expandableNodeIds)
+    expandAllForContract(normalizedContractId, expandableNodeIds)
   }
 
   const handleCollapseAll = () => {
-    collapseAll()
+    collapseAllForContract(normalizedContractId)
   }
 
   useEffect(() => {
@@ -342,11 +399,15 @@ function ContractExplorer() {
               <VirtualizedTreeList
                 rows={flatRows}
                 expandedNodeIds={expandedNodes}
-                onToggleExpand={toggleExpanded}
+                onToggleExpand={(nodeId) =>
+                  toggleExpandedForContract(normalizedContractId, nodeId)
+                }
                 selectedRowId={selectedKeyPath}
                 onActivateRow={(row) => handleActivateRow(row.keyPath)}
               />
             )}
+
+            <DecodeFallbackList entries={decodeFallbackEntries} />
           </div>
         </Card>
       )}

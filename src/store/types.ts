@@ -31,6 +31,7 @@ export interface LedgerEntry {
   lastModifiedLedger: number
   expirationLedger?: number
   rawXdr?: string
+  decodeErrorReason?: string
 }
 
 // Map of ledger entries by key
@@ -69,10 +70,19 @@ export interface LedgerDataSlice {
 // Expanded nodes slice
 export interface ExpandedNodesSlice {
   expandedNodes: Array<string>
+  expandedNodesByContract: Record<string, Array<string>>
   setExpanded: (nodeId: string, expanded: boolean) => void
   toggleExpanded: (nodeId: string) => void
   expandAll: (nodeIds: Array<string>) => void
   collapseAll: () => void
+  setExpandedForContract: (
+    contractId: string,
+    nodeId: string,
+    expanded: boolean,
+  ) => void
+  toggleExpandedForContract: (contractId: string, nodeId: string) => void
+  expandAllForContract: (contractId: string, nodeIds: Array<string>) => void
+  collapseAllForContract: (contractId: string) => void
 }
 
 // Contract snapshot record
@@ -85,9 +95,11 @@ export interface ContractSnapshot {
   label?: string
 }
 
+export const DEFAULT_SNAPSHOT_RETENTION_LIMIT = 25
+
 // Snapshot slice
 export interface SnapshotSlice {
-  snapshots: Record<string, Array<ContractSnapshot>>
+  snapshots: NetworkScopedContractBuckets<Array<ContractSnapshot>>
   addSnapshot: (
     contractId: string,
     entries: Record<string, LedgerEntry>,
@@ -138,19 +150,49 @@ export interface WatchlistItem {
 
 // Watchlist slice
 export interface WatchlistSlice {
-  watchlist: Record<string, Array<WatchlistItem>>
-  addToWatchlist: (contractId: string, keyPath: string) => void
+  watchlist: NetworkScopedContractBuckets<Array<WatchlistItem>>
+  addToWatchlist: (contractId: string, keyPath: string) => boolean
   removeFromWatchlist: (contractId: string, keyPath: string) => void
   getWatchlistForContract: (contractId: string) => Array<WatchlistItem>
   clearWatchlist: (contractId: string) => void
 }
 
+export type NetworkScopedContractBuckets<T> = Partial<
+  Record<string, Partial<Record<string, T>>>
+>
+
 // Contract spec slice – parsed schema data keyed by contract ID
 export interface ContractSpecSlice {
   contractSpecs: Record<string, unknown>
+  contractSpecErrors: Record<string, string>
+  contractSpecMismatches: Record<string, Array<ContractSchemaMismatch>>
   setContractSpec: (contractId: string, spec: unknown) => void
+  compareContractSpec: (
+    contractId: string,
+    expectedFields: Array<ContractSchemaField>,
+    actualFields: Array<ContractSchemaField>,
+  ) => Array<ContractSchemaMismatch>
+  setContractSpecMismatches: (
+    contractId: string,
+    mismatches: Array<ContractSchemaMismatch>,
+  ) => void
   getContractSpec: (contractId: string) => unknown
+  setContractSpecError: (contractId: string, error: string) => void
+  getContractSpecError: (contractId: string) => string | undefined
   clearContractSpec: (contractId: string) => void
+}
+
+/** A storage field and its type in a parsed contract schema. */
+export interface ContractSchemaField {
+  keyPath: string
+  type: string
+}
+
+/** Expected and actual types for one mismatching contract storage key. */
+export interface ContractSchemaMismatch {
+  keyPath: string
+  expectedType: string
+  actualType: string
 }
 
 // Display preferences enums
