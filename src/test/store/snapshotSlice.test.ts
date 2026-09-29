@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { getStoreState, resetStore, useLensStore } from '../../store/lensStore'
+import {
+  DEFAULT_SNAPSHOT_RETENTION_LIMIT,
+  getStoreState,
+  resetStore,
+  useLensStore,
+} from '../../store/lensStore'
 
 import type { LedgerEntry } from '../../store/types'
 
@@ -196,6 +201,20 @@ describe('snapshotSlice', () => {
     expect(snapshots).toHaveLength(25)
     expect(snapshots[0].label).toBe('Snapshot 6')
     expect(snapshots[snapshots.length - 1].label).toBe('Snapshot 30')
+  })
+
+  it('caps custom retention limits at the persisted snapshot bound', () => {
+    const { addSnapshot, getSnapshots } = useLensStore.getState()
+
+    for (
+      let index = 1;
+      index <= DEFAULT_SNAPSHOT_RETENTION_LIMIT + 3;
+      index += 1
+    ) {
+      addSnapshot('c1', {}, index, undefined, 100)
+    }
+
+    expect(getSnapshots('c1')).toHaveLength(DEFAULT_SNAPSHOT_RETENTION_LIMIT)
   })
 
   it('uses a single clock value for the snapshot timestamp and id prefix', () => {

@@ -284,7 +284,7 @@ describe('lensStore', () => {
       expect(getStoreState().selectedKeyPath).toBe('contract.entry-0-value')
     })
 
-    it('setActiveContractId clears previous selected path and snapshots for prior contract', () => {
+    it('setActiveContractId clears selection while retaining prior snapshots', () => {
       const { addSnapshot, setSelectedKeyPath, setActiveContractId } =
         useLensStore.getState()
 

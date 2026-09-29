@@ -6,7 +6,10 @@ import { deepClone } from '../lib/deepClone'
 import { getLedgerEntries } from '../lib/network/getLedgerEntries'
 import { mapLedgerEntriesToStoreEntries } from '../lib/network/mapLedgerEntriesToStoreEntries'
 import { isDecoderWorkerError } from '../types/decoder-worker'
-import { createDecoderWorkerSafe } from '../workers/createDecoderWorkerSafe'
+import {
+  createDecoderWorkerSafe,
+  terminateDecoderWorkerSafe,
+} from '../workers/createDecoderWorkerSafe'
 import { normalizeNetworkScopeId } from './networkScope'
 import { createContractSlice } from './contractSlice'
 import { createContractSpecSlice } from './contractSpecSlice'
@@ -16,6 +19,7 @@ import {
   createSafeStorage,
   mergeNetworkConfig,
   mergePreferences,
+  sanitizeNetworkSnapshots,
   serializeNetworkConfigForStorage,
 } from './persistence'
 import { createPreferencesSlice } from './preferencesSlice'
@@ -24,8 +28,11 @@ import {
   ContractLoadStatus,
   DEFAULT_NETWORKS,
   DEFAULT_PREFERENCES,
+  DEFAULT_SNAPSHOT_RETENTION_LIMIT,
 } from './types'
 
+import type * as Comlink from 'comlink'
+import type { DecoderWorkerApi } from '../types/decoder-worker'
 import type { PersistedState } from './persistence'
 import type {
   ContractLoadSlice,
@@ -45,6 +52,16 @@ export type { LedgerEntry, LedgerKey } from './types'
 
 // Re-export for backwards compatibility
 export { DEFAULT_NETWORKS }
+
+function getDecoderFailureReason(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+  if (typeof error === 'string' && error.trim()) {
+    return error
+  }
+  return 'Decoder worker failed'
+}
 
 /**
  * Network config slice creator
@@ -218,7 +235,7 @@ const createExpandedNodesSlice = (
     })),
 })
 
-export const DEFAULT_SNAPSHOT_RETENTION_LIMIT = 25
+export { DEFAULT_SNAPSHOT_RETENTION_LIMIT } from './types'
 
 /**
  * Snapshot slice creator
@@ -267,8 +284,14 @@ const createSnapshotSlice = (
         label: normalizedLabel,
       }
 
+      const retentionLimit = Math.min(
+        maxSnapshots,
+        DEFAULT_SNAPSHOT_RETENTION_LIMIT,
+      )
       const trimmedSnapshots =
-        maxSnapshots > 0 ? [...existing, nextSnapshot].slice(-maxSnapshots) : []
+        retentionLimit > 0
+          ? [...existing, nextSnapshot].slice(-retentionLimit)
+          : []
 
       return {
         snapshots: {
@@ -395,7 +418,6 @@ const createContractLoadSlice = (
       const { signal } = controller
       const isRequestStale = () =>
         currentRequestId !== requestId || signal.aborted
-
       set(() => ({
         activeContractId: contractId,
         contractLoadStatus: ContractLoadStatus.LOADING,
@@ -422,26 +444,76 @@ const createContractLoadSlice = (
         }
 
         const decodedValuesByKey: Record<string, unknown> = {}
+        const decodeErrorReasonsByKey: Record<string, string> = {}
+        let workerUnavailableReason: string | null = null
 
         const decodeBatch = async () => {
-          const worker = await createDecoderWorkerSafe()
-          if (isRequestStale()) {
-            return
-          }
+          let activeDecoderWorker: Comlink.Remote<DecoderWorkerApi> | null =
+            null
+          try {
+            for (const entry of entries) {
+              if (isRequestStale()) {
+                return
+              }
 
-          for (const entry of entries) {
-            if (isRequestStale()) {
-              return
+              if (
+                activeDecoderWorker === null &&
+                workerUnavailableReason === null
+              ) {
+                try {
+                  activeDecoderWorker = await createDecoderWorkerSafe()
+                } catch (error) {
+                  workerUnavailableReason = getDecoderFailureReason(error)
+                }
+              }
+
+              if (isRequestStale()) {
+                return
+              }
+
+              if (activeDecoderWorker === null) {
+                decodedValuesByKey[entry.key] = {
+                  kind: 'raw-xdr',
+                  xdr: entry.xdr,
+                }
+                decodeErrorReasonsByKey[entry.key] =
+                  workerUnavailableReason ?? 'Decoder worker failed'
+                continue
+              }
+
+              try {
+                const result = await activeDecoderWorker.decodeScVal({
+                  xdr: entry.xdr,
+                })
+                if (isRequestStale()) {
+                  return
+                }
+
+                if (isDecoderWorkerError(result)) {
+                  decodedValuesByKey[entry.key] = {
+                    kind: 'raw-xdr',
+                    xdr: entry.xdr,
+                  }
+                  decodeErrorReasonsByKey[entry.key] =
+                    result.message.trim() || 'Decoder worker failed'
+                } else {
+                  decodedValuesByKey[entry.key] = result
+                }
+              } catch (error) {
+                decodedValuesByKey[entry.key] = {
+                  kind: 'raw-xdr',
+                  xdr: entry.xdr,
+                }
+                decodeErrorReasonsByKey[entry.key] =
+                  getDecoderFailureReason(error)
+                terminateDecoderWorkerSafe(activeDecoderWorker)
+                activeDecoderWorker = null
+              }
             }
-
-            const result = await worker.decodeScVal({ xdr: entry.xdr })
-            if (isRequestStale()) {
-              return
+          } finally {
+            if (activeDecoderWorker !== null) {
+              terminateDecoderWorkerSafe(activeDecoderWorker)
             }
-
-            decodedValuesByKey[entry.key] = isDecoderWorkerError(result)
-              ? { kind: 'raw-xdr', xdr: entry.xdr }
-              : result
           }
         }
 
@@ -463,6 +535,7 @@ const createContractLoadSlice = (
           contractId,
           entries,
           decodedValuesByKey,
+          decodeErrorReasonsByKey,
         })
 
         set((state) => ({
@@ -637,7 +710,7 @@ const createWatchlistSlice = (
 })
 
 /**
- * Combined Lens Store with persistence for networkConfig and preferences
+ * Combined Lens Store with persistence for networkConfig, preferences, watchlist, and snapshots
  *
  * Centralized state management for Soroban State Lens.
  * Includes slices for:
@@ -647,6 +720,7 @@ const createWatchlistSlice = (
  * - expandedNodes: Tree view expansion state (NOT persisted)
  * - contractLoadStatus: Contract fetch lifecycle (NOT persisted)
  * - watchlist: Pinned keys for quick access (PERSISTED)
+ * - snapshots: Bounded contract history (PERSISTED)
  */
 export const useLensStore = create<LensStore>()(
   persist<LensStore, [], [], PersistedState>(
@@ -681,13 +755,18 @@ export const useLensStore = create<LensStore>()(
           ),
           preferences: DEFAULT_PREFERENCES,
           watchlist: {},
+          snapshots: {},
         }
       },
-      // Persist networkConfig, preferences, and the watchlist
+      // Persist networkConfig, preferences, watchlist, and bounded snapshots
       partialize: (state): PersistedState => ({
         networkConfig: serializeNetworkConfigForStorage(state.networkConfig),
         preferences: state.preferences,
         watchlist: state.watchlist,
+        snapshots: sanitizeNetworkSnapshots(
+          state.snapshots,
+          state.networkConfig.networkId,
+        ),
       }),
       // Validate and merge persisted data safely
       merge: (persistedState, currentState) => {
@@ -754,6 +833,8 @@ export const resetStore = () => {
     snapshots: {},
     watchlist: {},
     contractSpecs: {},
+    contractSpecErrors: {},
+    contractSpecMismatches: {},
     activeContractId: null,
     selectedKeyPath: null,
     contractLoadStatus: ContractLoadStatus.IDLE,

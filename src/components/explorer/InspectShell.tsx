@@ -19,6 +19,11 @@ export function InspectShell({
   keyPathError,
 }: InspectShellProps) {
   const addToWatchlist = useLensStore((state) => state.addToWatchlist)
+  const schemaMismatch = useLensStore((state) =>
+    (
+      state.contractSpecMismatches[normalizedContractId.toUpperCase()] ?? []
+    ).find((mismatch) => mismatch.keyPath === keyPath),
+  )
   const entry = useLensStore((state) =>
     Object.values(state.ledgerData).reduce<LedgerEntry | undefined>(
       (selected, candidate) => {
@@ -140,6 +145,31 @@ export function InspectShell({
               Invalid key path
             </Heading>
             <p className="text-sm text-text-muted">{keyPathError}</p>
+          </div>
+        </Card>
+      ) : null}
+
+      {schemaMismatch ? (
+        <Card>
+          <div className="p-6 space-y-2" role="alert">
+            <Heading size="sm" as="h2" className="text-white">
+              Schema mismatch
+            </Heading>
+            <p className="text-sm text-text-muted font-mono break-all">
+              Key path: {schemaMismatch.keyPath}
+            </p>
+            <p className="text-sm text-text-muted">
+              Expected type:{' '}
+              <span className="font-mono text-white">
+                {schemaMismatch.expectedType}
+              </span>
+            </p>
+            <p className="text-sm text-text-muted">
+              Actual type:{' '}
+              <span className="font-mono text-white">
+                {schemaMismatch.actualType}
+              </span>
+            </p>
           </div>
         </Card>
       ) : null}
