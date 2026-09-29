@@ -3,6 +3,7 @@ import { isJsonRpcErrorResponse } from '../rpc/isJsonRpcErrorResponse'
 import { isJsonRpcSuccessResponse } from '../rpc/isJsonRpcSuccessResponse'
 import { toRpcRequestId } from '../rpc/toRpcRequestId'
 import { withRpcRetries } from '../rpc/withRpcRetries'
+import { normalizeRpcUrl } from '../validation/normalizeRpcUrl'
 import { deduplicateKeys } from './deduplicateKeys'
 
 export interface GetLedgerEntriesParams {
@@ -27,6 +28,16 @@ export class AbortError extends Error {
   constructor(message = 'Request was aborted') {
     super(message)
     this.name = 'AbortError'
+  }
+}
+
+export class GetLedgerEntriesError extends Error {
+  readonly attempts: number
+
+  constructor(message: string, attempts: number) {
+    super(message)
+    this.name = 'GetLedgerEntriesError'
+    this.attempts = attempts
   }
 }
 
@@ -71,130 +82,181 @@ export async function getLedgerEntries(
   // Deduplicate keys while preserving first-seen order
   const keys = deduplicateKeys(inputKeys)
 
+  if (signal?.aborted) {
+    throw new AbortError()
+  }
+
   // Stable guard: an empty keys array never reaches the RPC endpoint and
   // resolves to a handled empty result instead of an untyped request error.
   if (keys.length === 0) {
     return { entries: [], latestLedger: 0 }
   }
+  const normalized = normalizeRpcUrl(rpcUrl)
+  if (normalized === '') {
+    throw new Error('Invalid RPC URL')
+  }
+  const requestId = toRpcRequestId()
+  let attempts = 0
 
-  if (signal?.aborted) {
-    throw new AbortError()
+  let result: LedgerEntriesOpResult
+  try {
+    result = await withRpcRetries<LedgerEntriesOpResult>(
+      async () => {
+        attempts += 1
+        const payload = buildJsonRpcRequest(
+          'getLedgerEntries',
+          [keys],
+          requestId,
+        )
+
+        let response: Response
+        try {
+          response = await fetch(normalized, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+            signal,
+          })
+        } catch (error) {
+          if (error instanceof Error && error.name === 'AbortError') {
+            throw new AbortError()
+          }
+          // Surfaced as a retryable network error to the retry classifier.
+          return {
+            message: error instanceof Error ? error.message : 'Network error',
+            code: 'NETWORK_ERROR',
+          }
+        }
+
+        if (signal?.aborted) {
+          throw new AbortError()
+        }
+
+        if (!response.ok) {
+          return {
+            message: `HTTP error! status: ${response.status}`,
+            code: response.status,
+            status: response.status,
+          }
+        }
+
+        const data = (await response.json()) as unknown
+
+        if (signal?.aborted) {
+          throw new AbortError()
+        }
+
+        if (isJsonRpcErrorResponse(data, requestId)) {
+          return {
+            message: `RPC Error (${data.error.code}): ${data.error.message}`,
+            code: data.error.code,
+          }
+        }
+
+        if (!isJsonRpcSuccessResponse(data, requestId)) {
+          return {
+            message: 'Invalid JSON-RPC response format',
+            code: 'INVALID',
+          }
+        }
+
+        const rawResult = data.result
+        if (typeof rawResult !== 'object' || rawResult === null) {
+          return {
+            message: 'Invalid JSON-RPC response format',
+            code: 'INVALID',
+          }
+        }
+
+        const opResult = rawResult as {
+          entries?: unknown
+          latestLedger?: unknown
+        }
+
+        if (
+          !('entries' in opResult) ||
+          !(opResult.entries === null || Array.isArray(opResult.entries)) ||
+          typeof opResult.latestLedger !== 'number' ||
+          !Number.isFinite(opResult.latestLedger) ||
+          !Number.isInteger(opResult.latestLedger) ||
+          opResult.latestLedger < 0
+        ) {
+          return {
+            message: 'Invalid JSON-RPC response format',
+            code: 'INVALID',
+          }
+        }
+
+        const filteredEntries =
+          opResult.entries === null
+            ? []
+            : opResult.entries.filter(
+                (
+                  entry,
+                ): entry is {
+                  key: string
+                  xdr: string
+                  lastModifiedLedgerSeq?: number
+                  liveUntilLedgerSeq?: number
+                } => {
+                  if (!entry || typeof entry !== 'object') {
+                    return false
+                  }
+
+                  const key = (entry as { key?: unknown }).key
+                  const xdr = (entry as { xdr?: unknown }).xdr
+
+                  return (
+                    typeof key === 'string' &&
+                    key.trim() !== '' &&
+                    typeof xdr === 'string' &&
+                    xdr.trim() !== ''
+                  )
+                },
+              )
+
+        // Deduplicate by key, keep first-seen records
+        const seen = new Set<string>()
+        const deduped = [] as Array<{
+          key: string
+          xdr: string
+          lastModifiedLedgerSeq?: number
+          liveUntilLedgerSeq?: number
+        }>
+
+        for (const entry of filteredEntries) {
+          if (!seen.has(entry.key)) {
+            seen.add(entry.key)
+            deduped.push({
+              key: entry.key,
+              xdr: entry.xdr,
+              lastModifiedLedgerSeq: entry.lastModifiedLedgerSeq,
+              liveUntilLedgerSeq: entry.liveUntilLedgerSeq,
+            })
+          }
+        }
+
+        return {
+          entries: deduped,
+          latestLedger: opResult.latestLedger,
+        }
+      },
+      { signal },
+    )
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error
+    }
+    throw new GetLedgerEntriesError(
+      error instanceof Error ? error.message : 'Failed to load ledger entries',
+      attempts,
+    )
   }
 
-  const requestId = toRpcRequestId()
-
-  const result = await withRpcRetries<LedgerEntriesOpResult>(async () => {
-    const payload = buildJsonRpcRequest('getLedgerEntries', [keys], requestId)
-
-    let response: Response
-    try {
-      response = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-        signal,
-      })
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.name === 'AbortError'
-      ) {
-        throw new AbortError()
-      }
-      // Surfaced as a retryable network error to the retry classifier.
-      return {
-        message: error instanceof Error ? error.message : 'Network error',
-        code: 'NETWORK_ERROR',
-      }
-    }
-
-    if (signal?.aborted) {
-      throw new AbortError()
-    }
-
-    if (!response.ok) {
-      return {
-        message: `HTTP error! status: ${response.status}`,
-        code: response.status,
-        status: response.status,
-      }
-    }
-
-    const data = (await response.json()) as unknown
-
-    if (signal?.aborted) {
-      throw new AbortError()
-    }
-
-    if (isJsonRpcErrorResponse(data)) {
-      return {
-        message: `RPC Error (${data.error.code}): ${data.error.message}`,
-        code: data.error.code,
-      }
-    }
-
-    if (!isJsonRpcSuccessResponse(data)) {
-      return { message: 'Invalid JSON-RPC response format', code: 'INVALID' }
-    }
-
-    const opResult = data.result as {
-      entries?: Array<{
-        key?: unknown
-        xdr?: unknown
-        lastModifiedLedgerSeq?: number
-        liveUntilLedgerSeq?: number
-      }> | null
-      latestLedger?: unknown
-    }
-
-    if (
-      !opResult ||
-      (opResult.entries !== null && !Array.isArray(opResult.entries)) ||
-      typeof opResult.latestLedger !== 'number' ||
-      !Number.isFinite(opResult.latestLedger)
-    ) {
-      return { message: 'Invalid JSON-RPC response format', code: 'INVALID' }
-    }
-
-    const filteredEntries =
-      opResult.entries === null
-        ? []
-        : opResult.entries.filter((entry): entry is {
-            key: string
-            xdr: string
-            lastModifiedLedgerSeq?: number
-            liveUntilLedgerSeq?: number
-          } => {
-            if (!entry || typeof entry !== 'object') {
-              return false
-            }
-
-            const key = (entry as { key?: unknown }).key
-            const xdr = (entry as { xdr?: unknown }).xdr
-
-            return (
-              typeof key === 'string' &&
-              key.trim() !== '' &&
-              typeof xdr === 'string' &&
-              xdr.trim() !== ''
-            )
-          })
-
-    return {
-      entries: filteredEntries.map((entry) => ({
-        key: entry.key,
-        xdr: entry.xdr,
-        lastModifiedLedgerSeq: entry.lastModifiedLedgerSeq,
-        liveUntilLedgerSeq: entry.liveUntilLedgerSeq,
-      })),
-      latestLedger: opResult.latestLedger,
-    }
-  })
-
   if (isRpcError(result)) {
-    throw new Error(result.message)
+    throw new GetLedgerEntriesError(result.message, attempts)
   }
 
   return result

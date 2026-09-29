@@ -55,6 +55,8 @@ export interface NetworkConfigSlice {
 // Ledger data slice
 export interface LedgerDataSlice {
   ledgerData: LedgerDataMap
+  currentLedgerSequence: number
+  setCurrentLedgerSequence: (sequence: number) => void
   upsertLedgerEntry: (entry: LedgerEntry) => void
   upsertLedgerEntries: (entries: Array<LedgerEntry>) => void
   removeLedgerEntry: (key: LedgerKey) => void
@@ -79,6 +81,7 @@ export interface ContractSnapshot {
   id: string
   contractId: string
   timestamp: number
+  ledgerSequence: number
   ledgerData: Record<string, LedgerEntry>
   label?: string
 }
@@ -89,7 +92,9 @@ export interface SnapshotSlice {
   addSnapshot: (
     contractId: string,
     entries: Record<string, LedgerEntry>,
+    ledgerSequence: number,
     label?: string,
+    maxSnapshots?: number,
   ) => void
   getSnapshots: (contractId: string) => Array<ContractSnapshot>
   removeSnapshot: (contractId: string, snapshotId: string) => void
@@ -117,6 +122,7 @@ export enum ContractLoadStatus {
 export interface ContractLoadSlice {
   contractLoadStatus: ContractLoadStatus
   contractLoadError: string | null
+  contractLoadAttemptCount: number | null
   setContractLoadStatus: (status: ContractLoadStatus) => void
   setContractLoadError: (message: string | null) => void
   resetContractLoadState: () => void

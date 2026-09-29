@@ -17,6 +17,17 @@ describe('buildJsonRpcRequest', () => {
     })
   })
 
+  it('should trim leading and trailing whitespace before validation', () => {
+    const result = buildJsonRpcRequest('  getLatestLedger  ', {}, 1)
+
+    expect(result).toEqual({
+      jsonrpc: '2.0',
+      method: 'getLatestLedger',
+      params: {},
+      id: 1,
+    })
+  })
+
   it('should throw an error if the method is an empty string', () => {
     expect(() => buildJsonRpcRequest('', {}, 1)).toThrow(
       'JSON-RPC method name cannot be empty',
@@ -55,7 +66,7 @@ describe('buildJsonRpcRequest', () => {
     'should reject invalid request ids: %p',
     (invalidId) => {
       expect(() =>
-        buildJsonRpcRequest('someMethod', {}, invalidId as number),
+        buildJsonRpcRequest('someMethod', {}, invalidId),
       ).toThrow('JSON-RPC request ID must be a finite positive integer')
     },
   )

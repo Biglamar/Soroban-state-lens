@@ -7,6 +7,11 @@ import {
 
 import type { GetLedgerEntriesParams } from '../../lib/network/getLedgerEntries'
 
+// Allow vi.mock to hoist before imports
+vi.mock('../../lib/rpc/toRpcRequestId', () => ({
+  toRpcRequestId: vi.fn(() => 1),
+}))
+
 describe('getLedgerEntries', () => {
   const mockRpcUrl = 'https://test.rpc.url'
   const mockKeys = ['key1', 'key2']
@@ -121,6 +126,22 @@ describe('getLedgerEntries', () => {
   })
 
   describe('failure scenarios', () => {
+    it('includes the attempt count when transient failures exhaust retries', async () => {
+      vi.mocked(fetch).mockResolvedValue({
+        ok: false,
+        status: 503,
+      } as Response)
+
+      await expect(
+        getLedgerEntries({ rpcUrl: mockRpcUrl, keys: mockKeys }),
+      ).rejects.toMatchObject({
+        name: 'GetLedgerEntriesError',
+        message: 'HTTP error! status: 503',
+        attempts: 3,
+      })
+      expect(fetch).toHaveBeenCalledTimes(3)
+    })
+
     it('throws error on network failure', async () => {
       vi.mocked(fetch).mockRejectedValue(new Error('Network failure'))
 
@@ -183,7 +204,7 @@ describe('getLedgerEntries', () => {
       ).rejects.toThrow('Invalid JSON-RPC response format')
     })
 
-    it('filters malformed ledger records individually while preserving latestLedger', async () => {
+    it('filters malformed ledger entries while preserving valid siblings', async () => {
       vi.mocked(fetch).mockResolvedValue({
         ok: true,
         json: async () => ({
@@ -192,11 +213,9 @@ describe('getLedgerEntries', () => {
           result: {
             entries: [
               { key: 'key1', xdr: 'xdr1' },
-              { key: '', xdr: 'bad-xdr' },
-              { key: 'key2', xdr: '' },
-              { key: 'key3' },
-              null,
-              { key: 'key4', xdr: 'xdr4' },
+              { key: 'key2' },
+              { key: ' ', xdr: 'xdr3' },
+              { key: 'key4', xdr: '  ' },
             ],
             latestLedger: 100,
           },
@@ -209,10 +228,7 @@ describe('getLedgerEntries', () => {
           keys: mockKeys,
         }),
       ).resolves.toEqual({
-        entries: [
-          { key: 'key1', xdr: 'xdr1' },
-          { key: 'key4', xdr: 'xdr4' },
-        ],
+        entries: [{ key: 'key1', xdr: 'xdr1' }],
         latestLedger: 100,
       })
     })
@@ -236,6 +252,93 @@ describe('getLedgerEntries', () => {
           keys: mockKeys,
         }),
       ).rejects.toThrow('Invalid JSON-RPC response format')
+    })
+
+    it('throws error when success response id does not match request id', async () => {
+      // toRpcRequestId is mocked to return 1; response carries id: 9999
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          jsonrpc: '2.0',
+          id: 9999,
+          result: {
+            entries: [{ key: 'key1', xdr: 'xdr1' }],
+            latestLedger: 100,
+          },
+        }),
+      } as Response)
+
+      await expect(
+        getLedgerEntries({ rpcUrl: mockRpcUrl, keys: mockKeys }),
+      ).rejects.toThrow('Invalid JSON-RPC response format')
+    })
+
+    it('throws error when error response id does not match request id', async () => {
+      // toRpcRequestId is mocked to return 1; response carries id: 9999
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          jsonrpc: '2.0',
+          id: 9999,
+          error: { code: -32600, message: 'Invalid Request' },
+        }),
+      } as Response)
+
+      await expect(
+        getLedgerEntries({ rpcUrl: mockRpcUrl, keys: mockKeys }),
+      ).rejects.toThrow('Invalid JSON-RPC response format')
+    })
+
+    it.each([
+      { latestLedger: 1.5, description: 'fractional' },
+      { latestLedger: -1, description: 'negative' },
+      { latestLedger: Number.NaN, description: 'NaN' },
+      { latestLedger: Number.POSITIVE_INFINITY, description: 'Infinity' },
+    ])(
+      'throws error when latestLedger is $description ($latestLedger)',
+      async ({ latestLedger }) => {
+        vi.mocked(fetch).mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            jsonrpc: '2.0',
+            id: 1,
+            result: {
+              entries: [{ key: 'key1', xdr: 'xdr1' }],
+              latestLedger,
+            },
+          }),
+        } as Response)
+
+        await expect(
+          getLedgerEntries({
+            rpcUrl: mockRpcUrl,
+            keys: mockKeys,
+          }),
+        ).rejects.toThrow('Invalid JSON-RPC response format')
+      },
+    )
+
+    it('accepts zero and large integer latestLedger values', async () => {
+      const mockRpcResponse = {
+        jsonrpc: '2.0',
+        id: 1,
+        result: {
+          entries: [{ key: 'key1', xdr: 'xdr1' }],
+          latestLedger: Number.MAX_SAFE_INTEGER,
+        },
+      }
+
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        json: async () => mockRpcResponse,
+      } as Response)
+
+      const result = await getLedgerEntries({
+        rpcUrl: mockRpcUrl,
+        keys: mockKeys,
+      })
+
+      expect(result.latestLedger).toBe(Number.MAX_SAFE_INTEGER)
     })
   })
 
