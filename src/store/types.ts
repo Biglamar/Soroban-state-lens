@@ -140,6 +140,7 @@ export interface ContractLoadSlice {
   setContractLoadError: (message: string | null) => void
   resetContractLoadState: () => void
   loadContract: (contractId: string, keys: Array<string>) => Promise<void>
+  refreshActiveKeys: () => Promise<void>
 }
 
 // Watchlist item (pinned key for quick access)

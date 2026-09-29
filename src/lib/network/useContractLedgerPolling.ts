@@ -5,14 +5,14 @@ interface UseContractLedgerPollingParams {
   contractId: string
   keys: Array<string>
   rpcUrl: string
-  loadContract: (contractId: string, keys: Array<string>) => Promise<void>
+  refreshActiveKeys: () => Promise<void>
 }
 
 export function useContractLedgerPolling({
   contractId,
   keys,
   rpcUrl,
-  loadContract,
+  refreshActiveKeys,
 }: UseContractLedgerPollingParams): void {
   useEffect(() => {
     let hasObservedInitialLedger = false
@@ -25,11 +25,11 @@ export function useContractLedgerPolling({
         }
 
         if (keys.length > 0) {
-          void loadContract(contractId, keys)
+          void refreshActiveKeys()
         }
       },
     })
 
     return stop
-  }, [contractId, keys, loadContract, rpcUrl])
+  }, [contractId, keys, refreshActiveKeys, rpcUrl])
 }

@@ -13,13 +13,13 @@ describe('useContractLedgerPolling', () => {
     const start = vi
       .spyOn(ledgerPoller, 'startLedgerHeadPoll')
       .mockReturnValue(stop)
-    const loadContract = vi.fn().mockResolvedValue(undefined)
+    const refreshActiveKeys = vi.fn().mockResolvedValue(undefined)
     const keys = ['encoded-key']
     const initialProps = {
       contractId: 'C123',
       keys,
       rpcUrl: 'https://rpc-one.example',
-      loadContract,
+      refreshActiveKeys,
     }
 
     const { rerender, unmount } = renderHook(
@@ -34,9 +34,9 @@ describe('useContractLedgerPolling', () => {
 
     const onLedgerChange = start.mock.calls[0][0].onLedgerChange
     act(() => onLedgerChange(100))
-    expect(loadContract).not.toHaveBeenCalled()
+    expect(refreshActiveKeys).not.toHaveBeenCalled()
     act(() => onLedgerChange(101))
-    expect(loadContract).toHaveBeenCalledWith('C123', keys)
+    expect(refreshActiveKeys).toHaveBeenCalledTimes(1)
 
     rerender({ ...initialProps, contractId: 'C456' })
     expect(stop).toHaveBeenCalledTimes(1)
