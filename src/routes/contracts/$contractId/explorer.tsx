@@ -127,6 +127,7 @@ function ContractExplorer() {
     (state) => state.setContractLoadError,
   )
   const loadContract = useLensStore((state) => state.loadContract)
+  const refreshActiveKeys = useLensStore((state) => state.refreshActiveKeys)
   const contractLoadStatus = useLensStore((state) => state.contractLoadStatus)
   const contractLoadError = useLensStore((state) => state.contractLoadError)
   const contractLoadAttemptCount = useLensStore(
@@ -186,7 +187,7 @@ function ContractExplorer() {
     [search.keys],
   )
 
-  useContractLedgerPolling({ contractId, keys, rpcUrl, loadContract })
+  useContractLedgerPolling({ contractId, keys, rpcUrl, refreshActiveKeys })
 
   const treeRoots = useMemo<Array<FlattenTreeRoot>>(
     () =>
