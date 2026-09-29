@@ -45,11 +45,13 @@ export interface NetworkConfigSlice {
   networkConfig: NetworkConfig
   connectionStatus: ConnectionStatus
   lastCustomUrl?: string
+  latestLedgerSequence: number | null
   setNetworkConfig: (config: Partial<NetworkConfig>) => void
   resetNetworkConfig: () => void
   setConnectionStatus: (status: ConnectionStatus) => void
   resetConnectionStatus: () => void
   setLastCustomUrl: (url: string) => void
+  setLatestLedgerSequence: (sequence: number | null) => void
 }
 
 // Ledger data slice

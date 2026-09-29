@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -8,6 +9,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import NetworkSelector from '../../components/global/NetworkSelector'
 import * as connectionModule from '../../lib/network/testConnection'
+import * as latestLedgerModule from '../../lib/network/getLatestLedger'
 import { resetStore, useLensStore } from '../../store/lensStore'
 import { DEFAULT_NETWORKS } from '../../store/types'
 
@@ -15,9 +17,16 @@ vi.mock('../../lib/network/testConnection', () => ({
   testRpcConnection: vi.fn(),
 }))
 
+vi.mock('../../lib/network/getLatestLedger', () => ({
+  getLatestLedgerConnectionCheck: vi.fn(),
+}))
+
 describe('NetworkSelector Component', () => {
   beforeEach(() => {
     resetStore()
+    vi.mocked(latestLedgerModule.getLatestLedgerConnectionCheck).mockResolvedValue({
+      success: false,
+    })
   })
 
   afterEach(() => {
@@ -42,6 +51,42 @@ describe('NetworkSelector Component', () => {
 
     const state = useLensStore.getState()
     expect(state.networkConfig).toEqual(DEFAULT_NETWORKS.mainnet)
+  })
+
+  it('aborts stale ledger checks when network changes', async () => {
+    type LatestLedgerResult = Awaited<
+      ReturnType<typeof latestLedgerModule.getLatestLedgerConnectionCheck>
+    >
+    const resolvers: Array<(result: LatestLedgerResult) => void> = []
+    const signals: Array<AbortSignal | undefined> = []
+    vi.mocked(latestLedgerModule.getLatestLedgerConnectionCheck).mockImplementation(
+      (_url, options) => {
+        signals.push(typeof options === 'object' ? options.signal : undefined)
+        return new Promise((resolve) => resolvers.push(resolve))
+      },
+    )
+
+    render(<NetworkSelector />)
+    await waitFor(() => expect(resolvers).toHaveLength(1))
+
+    fireEvent.click(screen.getByRole('button', { name: /select network/i }))
+    fireEvent.click(screen.getByRole('option', { name: /mainnet/i }))
+    await waitFor(() => expect(resolvers).toHaveLength(2))
+
+    expect(signals[0]?.aborted).toBe(true)
+    expect(useLensStore.getState().latestLedgerSequence).toBeNull()
+
+    await act(async () => {
+      resolvers[0]?.({ success: true, ledger: { sequence: 100 } })
+      await Promise.resolve()
+    })
+    expect(useLensStore.getState().latestLedgerSequence).toBeNull()
+
+    await act(async () => {
+      resolvers[1]?.({ success: true, ledger: { sequence: 200 } })
+      await Promise.resolve()
+    })
+    expect(useLensStore.getState().latestLedgerSequence).toBe(200)
   })
 
   it('opens custom panel and captures custom url and network passphrase on apply', () => {
