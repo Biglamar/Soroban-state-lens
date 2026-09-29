@@ -12,6 +12,7 @@ export const createContractSpecSlice = (
   get: () => LensStore,
 ): ContractSpecSlice => ({
   contractSpecs: {},
+  contractSpecErrors: {},
   contractSpecMismatches: {},
 
   setContractSpec: (contractId: string, spec: unknown) => {
@@ -29,6 +30,11 @@ export const createContractSpecSlice = (
         ...state.contractSpecMismatches,
         [normalizedContractId]: [],
       },
+      contractSpecErrors: Object.fromEntries(
+        Object.entries(state.contractSpecErrors).filter(
+          ([key]) => key !== normalizedContractId,
+        ),
+      ),
     }))
   },
 
@@ -67,6 +73,34 @@ export const createContractSpecSlice = (
     return get().contractSpecs[normalizedContractId]
   },
 
+  setContractSpecError: (contractId: string, error: string) => {
+    const normalizedContractId = normalizeContractSpecKey(contractId)
+    const normalizedError = error.trim().slice(0, 500)
+    if (!normalizedContractId || !normalizedError) return
+
+    set((state) => ({
+      contractSpecErrors: {
+        ...state.contractSpecErrors,
+        [normalizedContractId]: normalizedError,
+      },
+      contractSpecs: Object.fromEntries(
+        Object.entries(state.contractSpecs).filter(
+          ([key]) => key !== normalizedContractId,
+        ),
+      ),
+      contractSpecMismatches: {
+        ...state.contractSpecMismatches,
+        [normalizedContractId]: [],
+      },
+    }))
+  },
+
+  getContractSpecError: (contractId: string) => {
+    const normalizedContractId = normalizeContractSpecKey(contractId)
+    if (!normalizedContractId) return undefined
+    return get().contractSpecErrors[normalizedContractId]
+  },
+
   clearContractSpec: (contractId: string) =>
     set((state) => {
       const normalizedContractId = normalizeContractSpecKey(contractId)
@@ -76,8 +110,10 @@ export const createContractSpecSlice = (
 
       const { [normalizedContractId]: _spec, ...contractSpecs } =
         state.contractSpecs
+      const { [normalizedContractId]: _error, ...contractSpecErrors } =
+        state.contractSpecErrors
       const { [normalizedContractId]: _mismatches, ...contractSpecMismatches } =
         state.contractSpecMismatches
-      return { contractSpecs, contractSpecMismatches }
+      return { contractSpecs, contractSpecErrors, contractSpecMismatches }
     }),
 })

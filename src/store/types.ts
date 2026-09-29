@@ -147,6 +147,7 @@ export interface WatchlistSlice {
 // Contract spec slice – parsed schema data keyed by contract ID
 export interface ContractSpecSlice {
   contractSpecs: Record<string, unknown>
+  contractSpecErrors: Record<string, string>
   contractSpecMismatches: Record<string, Array<ContractSchemaMismatch>>
   setContractSpec: (contractId: string, spec: unknown) => void
   compareContractSpec: (
@@ -159,6 +160,8 @@ export interface ContractSpecSlice {
     mismatches: Array<ContractSchemaMismatch>,
   ) => void
   getContractSpec: (contractId: string) => unknown
+  setContractSpecError: (contractId: string, error: string) => void
+  getContractSpecError: (contractId: string) => string | undefined
   clearContractSpec: (contractId: string) => void
 }
 
