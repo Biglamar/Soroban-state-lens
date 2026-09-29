@@ -269,7 +269,7 @@ export const DEFAULT_NETWORKS: Record<string, NetworkConfig> = {
   },
   testnet:{
     networkId: 'testnet',
-    networkPassphrase: 'Test FDF Network ; September 2015',
+    networkPassphrase: 'Test DF Network ; September 2015',
     rpcUrl: 'https://soroban-testnet.stellar.org',
     horizonUrl: 'https://horizon-testnet.stellar.org',
   },

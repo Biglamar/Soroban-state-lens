@@ -1,19 +1,19 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useStore } from '@tanstack/react-store'
 import { validateContractRouteParam } from './-validateContractRouteParam'
-import { selectSnapshotsForContract } from '../../../store/selectors'
-import type { ContractSnapshot } from '../../../store/types'
+import { useStore } from '@tanstack/react-store'
+import { selectSnapshotsForContract } from '~/store/selectors'
+import type { ContractSnapshot } from '~/store/types'
 
 export const Route = createFileRoute(
   ('/contracts/$contractId/history' as unknown) as any,
-)({
+({
   beforeLoad: ({ params }) => {
     validateContractRouteParam(params.contractId)
   },
   component: ContractHistoryRoute,
 })
 
-export function formatSnapshotTime(timestamp: number): string {
+function formatTimestamp(timestamp: number): string {
   if (!Number.isFinite(timestamp)) {
     return 'Unknown time'
   }
@@ -24,24 +24,19 @@ export function formatSnapshotTime(timestamp: number): string {
   return date.toLocaleString()
 }
 
-export function countSnapshotEntries(sn: ContractSnapshot): number {
-  if (!sn.ledgerData) {
-    return 0
-  }
-  return Object.keys(sn.ledgerData).length
+function getSnapshotLabel(snapshot: ContractSnapshot): string {
+  const label = snapshot.label?.trim()
+  return label && label.length > 0 ? label : 'Unlabeled'
 }
 
-export function sortSnapshotsByRecency(
-  snapshots: Array<ContractSnapshot>,
-): Array<ContractSnapshot> {
-  return [...snapshots].sort((a, b) => b.timestamp - a.timestamp)
+function getEntryCount(snapshot: ContractSnapshot): number {
+  return Object.keys(snapshot.ledgerData ?? {}).length
 }
 
 function ContractHistoryRoute() {
   const { contractId } = Route.useParams()
   const id = contractId
-  const snapshots = useStore(selectSnapshotsForContract(id))
-  const orderedSnapshots = sortSnapshotsByRecency(snapshots)
+  const snapshots = useStore(selectSnapshotsForContract(contractId))
 
   return (
     <div className="flex flex-col h-full p-6 text-white font-mono">
@@ -51,28 +46,27 @@ function ContractHistoryRoute() {
         </p>
         <h1 className="text-lg font-bold break-all">{id}</h1>
       </div>
-      {orderedSnapshots.length === 0 ? (
+      {snapshots.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-gray-600 text-sm">
-          No snapshots recorded for this contract yet.
+          No snapshots recorded for this contract.
         </div>
       ) : (
-        <ul className="flex-1 overflow-auto space-y-2" data-testid="snapshot-history-list">
-          {orderedSnapshots.map((snapshot) => (
+        <ul className="flex-1 space-y-2 overflow-auto">
+          {snapshots.map((snapshot) => (
             <li
               key={snapshot.id}
-              className="rounded border border-gray-800 bg-gray-900/40 p-3 text-sm"
-              data-testid="snapshot-history-item"
+              className="border border-gray-800 rounded-md p-3 bg-gray-900"
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="font-bold break-all">
-                  {snapshot.label ?? 'Unlabeled snapshot'}
+                <span className="text-sm font-bold break-all">
+                  {getSnapshotLabel(snapshot)}
                 </span>
                 <span className="text-xs text-gray-400 whitespace-nowrap">
-                  {countSnapshotEntries(snapshot)} entries
+                  {getEntryCount(snapshot)} entries
                 </span>
               </div>
               <div className="mt-1 text-xs text-gray-500">
-                {formatSnapshotTime(snapshot.timestamp)}
+                {formatTimestamp(snapshot.timestamp)}
               </div>
             </li>
           ))}

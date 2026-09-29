@@ -93,22 +93,16 @@ export const selectSnapshotsForContract =
     state.snapshots[normalizeNetworkScopeId(state.networkConfig.networkId)]?.[
       contractId
     ] ?? []
-export const selectLedgerEntryCount = (state: LensStore) =>
-  Object.keys(state.ledgerData).length
-export const selectHasLedgerData = (state: LensStore) =>
-  Object.keys(state.ledgerData).length > 0
-
-// Snapshot history selectors
 export const selectActiveSnapshots = (state: LensStore) => {
   const scopeId = normalizeNetworkScopeId(state.networkConfig.networkId)
-  const scopeSnapshots = state.snapshots[scopeId] ?? {}
+  const scopedSnapshots = state.snapshots[scopeId] ?? {}
   const result: Array<{
     contractId: string
     label: string
     timestamp: number
     entryCount: number
   }> = []
-  for (const [contractId, snapshots] of Object.entries(scopeSnapshots)) {
+  for (const [contractId, snapshots] of Object.entries(scopedSnapshots)) {
     for (const snapshot of snapshots) {
       result.push({
         contractId,
@@ -118,10 +112,12 @@ export const selectActiveSnapshots = (state: LensStore) => {
       })
     }
   }
-  return result.sort((a, b) => b.timestamp - a.timestamp)
+  return result
 }
-export const selectHasSnapshots = (state: LensStore) =>
-  selectActiveSnapshots(state).length > 0
+export const selectLedgerEntryCount = (state: LensStore) =>
+  Object.keys(state.ledgerData).length
+export const selectHasLedgerData = (state: LensStore) =>
+  Object.keys(state.ledgerData).length > 0
 
 // Expanded nodes selectors
 export const selectExpandedNodes = (state: LensStore) => state.expandedNodes
