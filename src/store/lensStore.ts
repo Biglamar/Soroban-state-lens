@@ -54,6 +54,7 @@ const createNetworkConfigSlice = (
   networkConfig: DEFAULT_NETWORK_CONFIG,
   connectionStatus: ConnectionStatus.IDLE,
   lastCustomUrl: undefined,
+  latestLedgerSequence: null,
 
   setNetworkConfig: (config: Partial<NetworkConfig>) =>
     set((state) => ({
@@ -65,6 +66,7 @@ const createNetworkConfigSlice = (
       networkConfig: DEFAULT_NETWORK_CONFIG,
       connectionStatus: ConnectionStatus.IDLE,
       lastCustomUrl: undefined,
+      latestLedgerSequence: null,
     })),
 
   setConnectionStatus: (status: ConnectionStatus) =>
@@ -80,6 +82,11 @@ const createNetworkConfigSlice = (
   setLastCustomUrl: (url: string) =>
     set(() => ({
       lastCustomUrl: url,
+    })),
+
+  setLatestLedgerSequence: (sequence: number | null) =>
+    set(() => ({
+      latestLedgerSequence: sequence,
     })),
 })
 
@@ -274,9 +281,9 @@ const createSnapshotSlice = (
       return {
         snapshots: {
           ...state.snapshots,
-          [normalizedContractId]: (state.snapshots[normalizedContractId] ?? []).filter(
-            (s) => s.id !== snapshotId,
-          ),
+          [normalizedContractId]: (
+            state.snapshots[normalizedContractId] ?? []
+          ).filter((s) => s.id !== snapshotId),
         },
       }
     }),
@@ -553,7 +560,9 @@ export const useLensStore = create<LensStore>()(
         }
 
         return {
-          networkConfig: serializeNetworkConfigForStorage(DEFAULT_NETWORK_CONFIG),
+          networkConfig: serializeNetworkConfigForStorage(
+            DEFAULT_NETWORK_CONFIG,
+          ),
           preferences: DEFAULT_PREFERENCES,
           watchlist: {},
         }
@@ -585,6 +594,8 @@ const EMPTY_ARRAY: Array<never> = []
 
 export const useNetworkConfig = () =>
   useLensStore((state) => state.networkConfig)
+export const useLatestLedgerSequence = () =>
+  useLensStore((state) => state.latestLedgerSequence)
 export const useLedgerData = () => useLensStore((state) => state.ledgerData)
 export const useExpandedNodes = () =>
   useLensStore((state) => state.expandedNodes)
@@ -620,6 +631,8 @@ export const resetStore = () => {
   useLensStore.setState({
     networkConfig: DEFAULT_NETWORK_CONFIG,
     connectionStatus: ConnectionStatus.IDLE,
+    lastCustomUrl: undefined,
+    latestLedgerSequence: null,
     ledgerData: {},
     expandedNodes: [],
     snapshots: {},
