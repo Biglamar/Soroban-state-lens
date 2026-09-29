@@ -9,6 +9,7 @@ describe('contractSpecSlice', () => {
 
   it('starts with empty contractSpecs', () => {
     expect(getStoreState().contractSpecs).toEqual({})
+    expect(getStoreState().contractSpecMismatches).toEqual({})
   })
 
   it('stores spec data for a contract ID', () => {
@@ -31,6 +32,21 @@ describe('contractSpecSlice', () => {
     expect(getStoreState().getContractSpec('CONTRACT_B')).toEqual({ name: 'B' })
   })
 
+  it('stores schema comparison details and clears them for matching fields', () => {
+    const compare = getStoreState().compareContractSpec
+    const expected = [{ keyPath: 'balance', type: 'i128' }]
+
+    expect(
+      compare('CONTRACT_A', expected, [{ keyPath: 'balance', type: 'symbol' }]),
+    ).toEqual([
+      { keyPath: 'balance', expectedType: 'i128', actualType: 'symbol' },
+    ])
+    expect(getStoreState().contractSpecMismatches.CONTRACT_A).toHaveLength(1)
+
+    expect(compare('CONTRACT_A', expected, expected)).toEqual([])
+    expect(getStoreState().contractSpecMismatches.CONTRACT_A).toEqual([])
+  })
+
   it('returns undefined for unknown contract ID', () => {
     expect(getStoreState().getContractSpec('UNKNOWN')).toBeUndefined()
   })
@@ -38,11 +54,19 @@ describe('contractSpecSlice', () => {
   it('clears a single contract spec without affecting others', () => {
     getStoreState().setContractSpec('CONTRACT_A', { name: 'A' })
     getStoreState().setContractSpec('CONTRACT_B', { name: 'B' })
+    getStoreState().setContractSpecMismatches('CONTRACT_A', [
+      { keyPath: 'balance', expectedType: 'i128', actualType: 'symbol' },
+    ])
+    getStoreState().setContractSpecMismatches('CONTRACT_B', [
+      { keyPath: 'owner', expectedType: 'address', actualType: 'bytes' },
+    ])
 
     getStoreState().clearContractSpec('CONTRACT_A')
 
     expect(getStoreState().getContractSpec('CONTRACT_A')).toBeUndefined()
     expect(getStoreState().getContractSpec('CONTRACT_B')).toEqual({ name: 'B' })
+    expect(getStoreState().contractSpecMismatches.CONTRACT_A).toBeUndefined()
+    expect(getStoreState().contractSpecMismatches.CONTRACT_B).toHaveLength(1)
   })
 
   it('normalizes equivalent contract IDs to the same cache entry', () => {
