@@ -691,6 +691,7 @@ export const resetStore = () => {
     snapshots: {},
     watchlist: {},
     contractSpecs: {},
+    contractSpecErrors: {},
     activeContractId: null,
     selectedKeyPath: null,
     contractLoadStatus: ContractLoadStatus.IDLE,

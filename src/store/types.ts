@@ -147,8 +147,11 @@ export interface WatchlistSlice {
 // Contract spec slice – parsed schema data keyed by contract ID
 export interface ContractSpecSlice {
   contractSpecs: Record<string, unknown>
+  contractSpecErrors: Record<string, string>
   setContractSpec: (contractId: string, spec: unknown) => void
   getContractSpec: (contractId: string) => unknown
+  setContractSpecError: (contractId: string, error: string) => void
+  getContractSpecError: (contractId: string) => string | undefined
   clearContractSpec: (contractId: string) => void
 }
 
