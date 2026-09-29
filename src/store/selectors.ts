@@ -98,6 +98,31 @@ export const selectLedgerEntryCount = (state: LensStore) =>
 export const selectHasLedgerData = (state: LensStore) =>
   Object.keys(state.ledgerData).length > 0
 
+// Snapshot history selectors
+export const selectActiveSnapshots = (state: LensStore) => {
+  const scopeId = normalizeNetworkScopeId(state.networkConfig.networkId)
+  const scopeSnapshots = state.snapshots[scopeId] ?? {}
+  const result: Array<{
+    contractId: string
+    label: string
+    timestamp: number
+    entryCount: number
+  }> = []
+  for (const [contractId, snapshots] of Object.entries(scopeSnapshots)) {
+    for (const snapshot of snapshots) {
+      result.push({
+        contractId,
+        label: snapshot.label,
+        timestamp: snapshot.timestamp,
+        entryCount: snapshot.entryCount,
+      })
+    }
+  }
+  return result.sort((a, b) => b.timestamp - a.timestamp)
+}
+export const selectHasSnapshots = (state: LensStore) =>
+  selectActiveSnapshots(state).length > 0
+
 // Expanded nodes selectors
 export const selectExpandedNodes = (state: LensStore) => state.expandedNodes
 export const selectIsExpanded = (nodeId: string) => (state: LensStore) =>

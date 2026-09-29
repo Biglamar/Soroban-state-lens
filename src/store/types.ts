@@ -3,6 +3,7 @@
  */
 
 // Network configuration status
+
 export enum ConnectionStatus {
   IDLE = 'idle',
   LOADING = 'loading',
@@ -11,6 +12,7 @@ export enum ConnectionStatus {
 }
 
 // Network configuration
+
 export interface NetworkConfig {
   networkId: string
   networkPassphrase: string
@@ -19,9 +21,11 @@ export interface NetworkConfig {
 }
 
 // Ledger entry key (unique identifier)
+
 export type LedgerKey = string
 
 // Ledger entry data
+
 export interface LedgerEntry {
   key: LedgerKey
   contractId: string
@@ -35,12 +39,15 @@ export interface LedgerEntry {
 }
 
 // Map of ledger entries by key
+
 export type LedgerDataMap = Record<LedgerKey, LedgerEntry>
 
 // Set of expanded node IDs in the tree view
+
 export type ExpandedNodes = Set<string>
 
 // Network config slice
+
 export interface NetworkConfigSlice {
   networkConfig: NetworkConfig
   connectionStatus: ConnectionStatus
@@ -55,6 +62,7 @@ export interface NetworkConfigSlice {
 }
 
 // Ledger data slice
+
 export interface LedgerDataSlice {
   ledgerData: LedgerDataMap
   currentLedgerSequence: number
@@ -70,6 +78,7 @@ export interface LedgerDataSlice {
 }
 
 // Expanded nodes slice
+
 export interface ExpandedNodesSlice {
   expandedNodes: Array<string>
   expandedNodesByContract: Record<string, Array<string>>
@@ -88,6 +97,7 @@ export interface ExpandedNodesSlice {
 }
 
 // Contract snapshot record
+
 export interface ContractSnapshot {
   id: string
   contractId: string
@@ -100,6 +110,7 @@ export interface ContractSnapshot {
 export const DEFAULT_SNAPSHOT_RETENTION_LIMIT = 25
 
 // Snapshot slice
+
 export interface SnapshotSlice {
   snapshots: NetworkScopedContractBuckets<Array<ContractSnapshot>>
   addSnapshot: (
@@ -115,6 +126,7 @@ export interface SnapshotSlice {
 }
 
 // Contract slice
+
 export interface ContractSlice {
   activeContractId: string | null
   selectedKeyPath: string | null
@@ -144,6 +156,7 @@ export interface ContractLoadSlice {
 }
 
 // Watchlist item (pinned key for quick access)
+
 export interface WatchlistItem {
   contractId: string
   keyPath: string
@@ -151,6 +164,7 @@ export interface WatchlistItem {
 }
 
 // Watchlist slice
+
 export interface WatchlistSlice {
   watchlist: NetworkScopedContractBuckets<Array<WatchlistItem>>
   addToWatchlist: (contractId: string, keyPath: string) => boolean
@@ -164,6 +178,7 @@ export type NetworkScopedContractBuckets<T> = Partial<
 >
 
 // Contract spec slice – parsed schema data keyed by contract ID
+
 export interface ContractSpecSlice {
   contractSpecs: Record<string, unknown>
   contractSpecErrors: Record<string, string>
@@ -185,12 +200,14 @@ export interface ContractSpecSlice {
 }
 
 /** A storage field and its type in a parsed contract schema. */
+
 export interface ContractSchemaField {
   keyPath: string
   type: string
 }
 
 /** Expected and actual types for one mismatching contract storage key. */
+
 export interface ContractSchemaMismatch {
   keyPath: string
   expectedType: string
@@ -198,6 +215,7 @@ export interface ContractSchemaMismatch {
 }
 
 // Display preferences enums
+
 export enum ByteDisplayMode {
   HEX = 'hex',
   BASE64 = 'base64',
@@ -211,12 +229,14 @@ export enum BigIntDisplayMode {
 }
 
 // Display preferences
+
 export interface DisplayPreferences {
   byteDisplayMode: ByteDisplayMode
   bigIntDisplayMode: BigIntDisplayMode
 }
 
 // Preferences slice
+
 export interface PreferencesSlice {
   preferences: DisplayPreferences
   setByteDisplayMode: (mode: ByteDisplayMode) => void
@@ -225,6 +245,7 @@ export interface PreferencesSlice {
 }
 
 // Combined store type
+
 export interface LensStore
   extends
     NetworkConfigSlice,
@@ -238,6 +259,7 @@ export interface LensStore
     WatchlistSlice {}
 
 // Default network configurations
+
 export const DEFAULT_NETWORKS: Record<string, NetworkConfig> = {
   futurenet: {
     networkId: 'futurenet',
@@ -245,9 +267,9 @@ export const DEFAULT_NETWORKS: Record<string, NetworkConfig> = {
     rpcUrl: 'https://rpc-futurenet.stellar.org',
     horizonUrl: 'https://horizon-futurenet.stellar.org',
   },
-  testnet: {
+  testnet:{
     networkId: 'testnet',
-    networkPassphrase: 'Test SDF Network ; September 2015',
+    networkPassphrase: 'Test FDF Network ; September 2015',
     rpcUrl: 'https://soroban-testnet.stellar.org',
     horizonUrl: 'https://horizon-testnet.stellar.org',
   },
@@ -262,6 +284,7 @@ export const DEFAULT_NETWORKS: Record<string, NetworkConfig> = {
 /**
  * Default display preferences
  */
+
 export const DEFAULT_PREFERENCES: DisplayPreferences = {
   byteDisplayMode: ByteDisplayMode.HEX,
   bigIntDisplayMode: BigIntDisplayMode.DECIMAL,
