@@ -692,6 +692,7 @@ export const resetStore = () => {
     watchlist: {},
     contractSpecs: {},
     contractSpecErrors: {},
+    contractSpecMismatches: {},
     activeContractId: null,
     selectedKeyPath: null,
     contractLoadStatus: ContractLoadStatus.IDLE,
