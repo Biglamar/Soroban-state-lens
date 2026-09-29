@@ -31,10 +31,11 @@ describe('InspectShell', () => {
   const storedEntry = {
     key: '/state/ledger',
     contractId: 'C123',
-    type: 'Other' as const,
-    value: { kind: 'primitive', scType: 'u32', value: 42 },
-    lastModifiedLedger: 123,
-    expirationLedger: 456,
+    type: 'ContractData' as const,
+    durability: 'Persistent' as const,
+    value: null,
+    lastModifiedLedger: 1234567,
+    expirationLedger: 1235000,
     rawXdr: 'known-entry-xdr',
   }
 
@@ -55,9 +56,74 @@ describe('InspectShell', () => {
     expect(screen.getAllByText('C123').length).toBeGreaterThan(0)
     expect(screen.getByText('/state/ledger')).toBeTruthy()
     expect(screen.getByText('Metadata')).toBeTruthy()
-    expect(screen.getByText('123')).toBeTruthy()
-    expect(screen.getByText('456')).toBeTruthy()
+    expect(screen.getByText('Persistent')).toBeTruthy()
+    expect(screen.getByText('1234567')).toBeTruthy()
+    expect(screen.getByText('1235000')).toBeTruthy()
     expect(screen.getByText(storedEntry.rawXdr)).toBeTruthy()
+  })
+
+  it('renders temporary metadata from the matching stored entry', () => {
+    useLensStore.setState({
+      watchlist: {},
+      ledgerData: {
+        'C123::ContractData::matching-key': {
+          key: 'C123::ContractData::matching-key',
+          contractId: 'C123',
+          type: 'ContractData',
+          durability: 'Temporary',
+          value: null,
+          lastModifiedLedger: 200,
+          expirationLedger: 240,
+        },
+        'C123::ContractData::other-key': {
+          key: 'C123::ContractData::other-key',
+          contractId: 'C123',
+          type: 'ContractData',
+          durability: 'Persistent',
+          value: null,
+          lastModifiedLedger: 300,
+        },
+      },
+    })
+
+    render(
+      <InspectShell
+        contractId="C123"
+        normalizedContractId="C123"
+        keyPath="C123::ContractData::matching-key.item-0"
+      />,
+    )
+
+    expect(screen.getByText('Temporary')).toBeTruthy()
+    expect(screen.getByText('200')).toBeTruthy()
+    expect(screen.getByText('240')).toBeTruthy()
+    expect(screen.queryByText('Persistent')).toBeNull()
+    expect(screen.queryByText('300')).toBeNull()
+  })
+
+  it('renders N/A when the matching stored entry has no metadata', () => {
+    useLensStore.setState({
+      watchlist: {},
+      ledgerData: {
+        'C123::ContractData::missing-key': {
+          key: 'C123::ContractData::missing-key',
+          contractId: 'C123',
+          type: 'ContractData',
+          value: null,
+          lastModifiedLedger: 0,
+        },
+      },
+    })
+
+    render(
+      <InspectShell
+        contractId="C123"
+        normalizedContractId="C123"
+        keyPath="C123::ContractData::missing-key.item-0"
+      />,
+    )
+
+    expect(screen.getAllByText('N/A')).toHaveLength(3)
   })
 
   it('pins the current key path to the watchlist', () => {

@@ -12,12 +12,6 @@ interface InspectShellProps {
   keyPathError?: string
 }
 
-interface KeyMetadata {
-  durability?: string
-  lastModifiedLedger: number
-  expirationLedger?: number
-}
-
 export function InspectShell({
   contractId,
   normalizedContractId,
@@ -42,13 +36,6 @@ export function InspectShell({
   )
   const [copied, setCopied] = useState(false)
   const copiedResetTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const metadata: KeyMetadata | null = entry
-    ? {
-        durability: entry.durability,
-        lastModifiedLedger: entry.lastModifiedLedger,
-        expirationLedger: entry.expirationLedger,
-      }
-    : null
 
   useEffect(() => {
     return () => {
@@ -186,7 +173,7 @@ export function InspectShell({
                   Durability
                 </div>
                 <div className="text-white font-mono">
-                  {metadata?.durability ?? 'N/A'}
+                  {entry.durability ?? 'N/A'}
                 </div>
               </div>
               <div>
@@ -194,7 +181,9 @@ export function InspectShell({
                   Last Modified Ledger
                 </div>
                 <div className="text-white font-mono">
-                  {metadata?.lastModifiedLedger ?? 'N/A'}
+                  {entry.lastModifiedLedger > 0
+                    ? entry.lastModifiedLedger
+                    : 'N/A'}
                 </div>
               </div>
               <div>
@@ -202,7 +191,7 @@ export function InspectShell({
                   Expiration Ledger
                 </div>
                 <div className="text-white font-mono">
-                  {metadata?.expirationLedger ?? 'N/A'}
+                  {entry.expirationLedger ?? 'N/A'}
                 </div>
               </div>
             </div>

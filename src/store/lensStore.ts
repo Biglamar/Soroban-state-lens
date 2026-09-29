@@ -325,20 +325,38 @@ const createContractLoadSlice = (
   let activeController: AbortController | null = null
   let activeDecodeBatch: Promise<void> | null = null
 
+  const getAttemptCount = (error: unknown): number | null => {
+    if (typeof error !== 'object' || error === null || !('attempts' in error)) {
+      return null
+    }
+
+    const attempts = (error as { attempts?: unknown }).attempts
+    return typeof attempts === 'number' &&
+      Number.isInteger(attempts) &&
+      attempts > 0
+      ? attempts
+      : null
+  }
+
   return {
     contractLoadStatus: ContractLoadStatus.IDLE,
     contractLoadError: null,
+    contractLoadAttemptCount: null,
 
     setContractLoadStatus: (status: ContractLoadStatus) =>
       set(() => ({ contractLoadStatus: status })),
 
     setContractLoadError: (message: string | null) =>
-      set(() => ({ contractLoadError: message })),
+      set(() => ({
+        contractLoadError: message,
+        contractLoadAttemptCount: null,
+      })),
 
     resetContractLoadState: () =>
       set(() => ({
         contractLoadStatus: ContractLoadStatus.IDLE,
         contractLoadError: null,
+        contractLoadAttemptCount: null,
       })),
 
     loadContract: async (contractId: string, keys: Array<string>) => {
@@ -359,6 +377,7 @@ const createContractLoadSlice = (
         activeContractId: contractId,
         contractLoadStatus: ContractLoadStatus.LOADING,
         contractLoadError: null,
+        contractLoadAttemptCount: null,
       }))
 
       try {
@@ -440,6 +459,7 @@ const createContractLoadSlice = (
               ? ContractLoadStatus.EMPTY
               : ContractLoadStatus.SUCCESS,
           contractLoadError: null,
+          contractLoadAttemptCount: null,
         }))
       } catch (error) {
         if (isRequestStale()) {
@@ -450,6 +470,7 @@ const createContractLoadSlice = (
           contractLoadStatus: ContractLoadStatus.ERROR,
           contractLoadError:
             error instanceof Error ? error.message : 'Failed to load contract',
+          contractLoadAttemptCount: getAttemptCount(error),
         }))
       } finally {
         if (activeController === controller) {
@@ -674,6 +695,7 @@ export const resetStore = () => {
     selectedKeyPath: null,
     contractLoadStatus: ContractLoadStatus.IDLE,
     contractLoadError: null,
+    contractLoadAttemptCount: null,
     preferences: DEFAULT_PREFERENCES,
   })
 }
