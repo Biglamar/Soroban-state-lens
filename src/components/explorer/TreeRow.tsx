@@ -1,12 +1,17 @@
 import type { FlatTreeRow } from '../../lib/tree/flatTreeRow'
+import type { KeyboardEvent, Ref } from 'react'
 
 interface TreeRowProps {
   row: FlatTreeRow
   isExpanded: boolean
   isSelected: boolean
   rowHeight: number
+  tabIndex?: number
+  rowRef?: Ref<HTMLDivElement>
   onToggleExpand?: (rowId: string) => void
   onActivate?: (row: FlatTreeRow) => void
+  onKeyNavigate?: (direction: 'up' | 'down') => void
+  onFocus?: () => void
 }
 
 function formatPreview(row: FlatTreeRow): string {
@@ -24,9 +29,9 @@ function formatPreview(row: FlatTreeRow): string {
     case 'unsupported':
       return row.node.variant
     case 'truncated':
-      return `depth=${row.node.depth}`
+      return `truncated at depth=${row.node.depth}`
     case 'cycle':
-      return `depth=${row.node.depth}`
+      return `cycle detected at depth=${row.node.depth}`
     default:
       return ''
   }
@@ -49,28 +54,54 @@ export function TreeRow({
   isExpanded,
   isSelected,
   rowHeight,
+  tabIndex = 0,
+  rowRef,
   onToggleExpand,
   onActivate,
+  onKeyNavigate,
+  onFocus,
 }: TreeRowProps) {
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      onKeyNavigate?.('down')
+      return
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      onKeyNavigate?.('up')
+      return
+    }
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onActivate?.(row)
+    }
+  }
+
   return (
     <div
-      role="button"
-      tabIndex={0}
+      ref={rowRef}
+      role="treeitem"
+      tabIndex={tabIndex}
       data-testid="tree-row"
       onClick={() => onActivate?.(row)}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onActivate?.(row)
-        }
-      }}
+      onKeyDown={handleKeyDown}
+      onFocus={onFocus}
       className={`w-full flex items-center gap-2 px-3 border-b border-white/5 text-left ${
         isSelected ? 'bg-primary/10' : 'hover:bg-white/5'
       }`}
       style={{ height: rowHeight }}
       aria-label={`Open ${row.label}`}
+      aria-level={row.depth + 1}
+      aria-selected={isSelected}
+      aria-expanded={row.hasChildren ? isExpanded : undefined}
     >
-      <div style={{ marginLeft: row.depth * 16 }} className="flex items-center gap-2 min-w-0">
+      <div
+        style={{ marginLeft: row.depth * 16 }}
+        className="flex items-center gap-2 min-w-0"
+      >
         {row.hasChildren ? (
           <button
             type="button"
@@ -87,7 +118,9 @@ export function TreeRow({
           <span className="w-4" aria-hidden="true" />
         )}
 
-        <span className="font-mono text-xs text-white truncate">{row.label}</span>
+        <span className="font-mono text-xs text-white truncate">
+          {row.label}
+        </span>
         <span className="font-mono text-[10px] uppercase text-primary border border-primary/30 rounded px-1 py-0.5">
           {typeBadge(row)}
         </span>

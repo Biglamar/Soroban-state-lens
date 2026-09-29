@@ -39,6 +39,11 @@ describe('TreeRow', () => {
     )
 
     expect(screen.queryByRole('button', { name: /toggle/i })).toBeNull()
+    expect(
+      screen
+        .getByRole('treeitem', { name: 'Open entry[0].value' })
+        .getAttribute('aria-level'),
+    ).toBe('3')
     expect(screen.getByText('hello')).toBeTruthy()
     expect(screen.getByText('string')).toBeTruthy()
   })
@@ -59,9 +64,52 @@ describe('TreeRow', () => {
       />,
     )
 
-    expect(screen.getByRole('button', { name: 'Toggle entry[0].value' })).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Toggle entry[0].value' }),
+    ).toBeTruthy()
     expect(screen.getByText('vec')).toBeTruthy()
     expect(screen.getByText('0 items')).toBeTruthy()
+  })
+
+  it('reports expansion state only for expandable rows', () => {
+    const row = makeRow({
+      hasChildren: true,
+      kind: 'vec',
+      node: { kind: 'vec', path: [], items: [], raw: { switch: 'ScvVec' } },
+    })
+
+    const { rerender } = render(
+      <TreeRow
+        row={row}
+        rowHeight={40}
+        isExpanded={false}
+        isSelected={false}
+      />,
+    )
+
+    const expandableRow = screen.getByRole('treeitem', {
+      name: 'Open entry[0].value',
+    })
+    expect(expandableRow.getAttribute('aria-expanded')).toBe('false')
+
+    rerender(
+      <TreeRow row={row} rowHeight={40} isExpanded={true} isSelected={false} />,
+    )
+    expect(expandableRow.getAttribute('aria-expanded')).toBe('true')
+
+    rerender(
+      <TreeRow
+        row={makeRow()}
+        rowHeight={40}
+        isExpanded={false}
+        isSelected={false}
+      />,
+    )
+    expect(
+      screen
+        .getByRole('treeitem', { name: 'Open entry[0].value' })
+        .getAttribute('aria-expanded'),
+    ).toBeNull()
   })
 
   it('calls activate handler on row click', () => {
@@ -78,7 +126,97 @@ describe('TreeRow', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open entry[0].value' }))
+    fireEvent.click(
+      screen.getByRole('treeitem', { name: 'Open entry[0].value' }),
+    )
     expect(onActivate).toHaveBeenCalledWith(row)
+  })
+
+  it('calls activate handler on Enter and Space', () => {
+    const onActivate = vi.fn()
+    const row = makeRow()
+
+    render(
+      <TreeRow
+        row={row}
+        rowHeight={40}
+        isExpanded={false}
+        isSelected={false}
+        onActivate={onActivate}
+      />,
+    )
+
+    const treeitem = screen.getByRole('treeitem', {
+      name: 'Open entry[0].value',
+    })
+    fireEvent.keyDown(treeitem, { key: 'Enter' })
+    fireEvent.keyDown(treeitem, { key: ' ' })
+
+    expect(onActivate).toHaveBeenCalledTimes(2)
+    expect(onActivate).toHaveBeenCalledWith(row)
+  })
+
+  it('notifies parent on ArrowUp and ArrowDown', () => {
+    const onKeyNavigate = vi.fn()
+    const row = makeRow()
+
+    render(
+      <TreeRow
+        row={row}
+        rowHeight={40}
+        isExpanded={false}
+        isSelected={false}
+        onKeyNavigate={onKeyNavigate}
+      />,
+    )
+
+    const treeitem = screen.getByRole('treeitem', {
+      name: 'Open entry[0].value',
+    })
+    fireEvent.keyDown(treeitem, { key: 'ArrowDown' })
+    fireEvent.keyDown(treeitem, { key: 'ArrowUp' })
+
+    expect(onKeyNavigate).toHaveBeenNthCalledWith(1, 'down')
+    expect(onKeyNavigate).toHaveBeenNthCalledWith(2, 'up')
+  })
+
+  it('shows a distinct truncation preview for truncated marker rows', () => {
+    const row = makeRow({
+      kind: 'truncated',
+      label: 'truncated-marker',
+      node: { kind: 'truncated', path: [], depth: 3 },
+    })
+
+    render(
+      <TreeRow
+        row={row}
+        rowHeight={40}
+        isExpanded={false}
+        isSelected={false}
+      />,
+    )
+
+    expect(screen.getByText('truncated')).toBeTruthy()
+    expect(screen.getByText('truncated at depth=3')).toBeTruthy()
+  })
+
+  it('shows a distinct cycle preview for cycle marker rows', () => {
+    const row = makeRow({
+      kind: 'cycle',
+      label: 'cycle-marker',
+      node: { kind: 'cycle', path: [], depth: 3 },
+    })
+
+    render(
+      <TreeRow
+        row={row}
+        rowHeight={40}
+        isExpanded={false}
+        isSelected={false}
+      />,
+    )
+
+    expect(screen.getByText('cycle')).toBeTruthy()
+    expect(screen.getByText('cycle detected at depth=3')).toBeTruthy()
   })
 })
