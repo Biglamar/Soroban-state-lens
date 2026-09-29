@@ -133,7 +133,10 @@ function stringLikeToString(value: unknown): string {
   if (value === null || value === undefined) {
     return ''
   }
-  if (typeof value === 'object' && typeof (value as any).toString === 'function') {
+  if (
+    typeof value === 'object' &&
+    typeof (value as any).toString === 'function'
+  ) {
     try {
       const str = (value as any).toString()
       if (typeof str === 'string') {
@@ -246,7 +249,14 @@ function parts256ToString(value: unknown, signed: boolean): string | null {
     if (hiHi < minI64 || hiHi > maxI64) {
       return null
     }
-    if (hiLo < 0n || hiLo > maxU64 || loHi < 0n || loHi > maxU64 || loLo < 0n || loLo > maxU64) {
+    if (
+      hiLo < 0n ||
+      hiLo > maxU64 ||
+      loHi < 0n ||
+      loHi > maxU64 ||
+      loLo < 0n ||
+      loLo > maxU64
+    ) {
       return null
     }
 
@@ -309,6 +319,7 @@ function createUnsupportedNode(
 
 /** Sensible default for maximum recursion depth in node normalization. */
 export const MAX_DEPTH_DEFAULT = 32
+export const MAX_CHILDREN_DEFAULT = 1024
 
 /**
  * Normalizes an ScVal to a fully-typed Node with path and raw metadata.
@@ -363,9 +374,10 @@ export function normalizeNode(
         kind: 'primitive',
         path,
         scType: 'bool',
-        value: typeof normalizedScVal.value === 'boolean'
-          ? normalizedScVal.value
-          : false,
+        value:
+          typeof normalizedScVal.value === 'boolean'
+            ? normalizedScVal.value
+            : false,
         raw: toRaw(scVal),
       } satisfies PrimitiveNode
     }
@@ -552,6 +564,23 @@ export function normalizeNode(
       } satisfies PrimitiveNode
     }
 
+    case ScValType.SCV_BYTES: {
+      if (
+        ArrayBuffer.isView(normalizedScVal.value) &&
+        Object.prototype.toString.call(normalizedScVal.value) ===
+          '[object Uint8Array]'
+      ) {
+        return {
+          kind: 'primitive',
+          path,
+          scType: 'bytes',
+          value: Array.from(normalizedScVal.value as Uint8Array),
+          raw: toRaw(scVal),
+        } satisfies PrimitiveNode
+      }
+      return createUnsupportedNode(path, ScValType.SCV_BYTES, scVal)
+    }
+
     case ScValType.SCV_SYMBOL: {
       return {
         kind: 'primitive',
@@ -610,10 +639,14 @@ export function normalizeNode(
       }
 
       // Pre-allocate array with known size for better performance
-      const items: Array<Node> = new Array(normalizedScVal.value.length)
+      const itemCount = Math.min(
+        normalizedScVal.value.length,
+        MAX_CHILDREN_DEFAULT,
+      )
+      const items: Array<Node> = new Array(itemCount)
 
       // Use for loop with better error handling for large arrays
-      for (let i = 0; i < normalizedScVal.value.length; i++) {
+      for (let i = 0; i < itemCount; i++) {
         try {
           const childPath = appendPath(path, { type: 'index', index: i })
           items[i] = normalizeNode(
@@ -637,6 +670,13 @@ export function normalizeNode(
         kind: 'vec',
         path,
         items,
+        ...(normalizedScVal.value.length > MAX_CHILDREN_DEFAULT
+          ? {
+              childLimit: MAX_CHILDREN_DEFAULT,
+              omittedChildren:
+                normalizedScVal.value.length - MAX_CHILDREN_DEFAULT,
+            }
+          : {}),
         raw: toRaw(scVal),
       } satisfies VecNode
     }
@@ -644,7 +684,12 @@ export function normalizeNode(
     case ScValType.SCV_MAP: {
       const entries: Array<{ key: Node; value: Node }> = []
       if (Array.isArray(normalizedScVal.value)) {
-        for (const entry of normalizedScVal.value) {
+        const entryCount = Math.min(
+          normalizedScVal.value.length,
+          MAX_CHILDREN_DEFAULT,
+        )
+        for (let index = 0; index < entryCount; index++) {
+          const entry = normalizedScVal.value[index]
           // js-xdr exposes struct fields via accessor methods (e.g.
           // `entry.key()`), while plain test fixtures use `entry.key`.
           // Read both shapes so map decoding works for XDR-originated
@@ -675,6 +720,14 @@ export function normalizeNode(
         kind: 'map',
         path,
         entries,
+        ...(Array.isArray(normalizedScVal.value) &&
+        normalizedScVal.value.length > MAX_CHILDREN_DEFAULT
+          ? {
+              childLimit: MAX_CHILDREN_DEFAULT,
+              omittedChildren:
+                normalizedScVal.value.length - MAX_CHILDREN_DEFAULT,
+            }
+          : {}),
         raw: toRaw(scVal),
       } satisfies MapNode
     }

@@ -4,7 +4,10 @@ import { persist } from 'zustand/middleware'
 import { deepClone } from '../lib/deepClone'
 import { getLedgerEntries } from '../lib/network/getLedgerEntries'
 import { mapLedgerEntriesToStoreEntries } from '../lib/network/mapLedgerEntriesToStoreEntries'
-import { isDecoderWorkerError } from '../types/decoder-worker'
+import {
+  isDecoderWorkerError,
+  limitDecoderErrorDetail,
+} from '../types/decoder-worker'
 import { createDecoderWorkerSafe } from '../workers/createDecoderWorkerSafe'
 import {
   ConnectionStatus,
@@ -279,7 +282,10 @@ const createContractLoadSlice = (
       set(() => ({ contractLoadStatus: status })),
 
     setContractLoadError: (message: string | null) =>
-      set(() => ({ contractLoadError: message })),
+      set(() => ({
+        contractLoadError:
+          message === null ? null : limitDecoderErrorDetail(message),
+      })),
 
     resetContractLoadState: () =>
       set(() => ({
@@ -357,8 +363,9 @@ const createContractLoadSlice = (
 
         set(() => ({
           contractLoadStatus: ContractLoadStatus.ERROR,
-          contractLoadError:
+          contractLoadError: limitDecoderErrorDetail(
             error instanceof Error ? error.message : 'Failed to load contract',
+          ),
         }))
       } finally {
         if (activeController === controller) {
