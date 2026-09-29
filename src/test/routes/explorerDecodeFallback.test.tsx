@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { DecodeFallbackList } from '../../routes/contracts/$contractId/explorer'
+import type { ComponentProps, ReactNode } from 'react'
 import type { LedgerEntry } from '../../store/types'
 
 vi.mock('@stellar/design-system', () => ({
-  Button: (props: any) => <button {...props} />,
-  Card: (props: any) => <div {...props}>{props.children}</div>,
-  Heading: (props: any) => <div {...props}>{props.children}</div>,
+  Button: (props: ComponentProps<'button'>) => <button {...props} />,
+  Card: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  Heading: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))
 
 describe('Explorer decode fallback', () => {
@@ -24,11 +25,9 @@ describe('Explorer decode fallback', () => {
     render(<DecodeFallbackList entries={[entry]} />)
 
     expect(
-      screen.getByRole('region', { name: 'Decode fallbacks' }),
+      screen.getByRole('region', { name: 'Undecoded entries' }),
     ).toBeTruthy()
-    expect(
-      screen.getByText('Decode fallback: Malformed ScVal XDR'),
-    ).toBeTruthy()
+    expect(screen.getByText('Malformed ScVal XDR')).toBeTruthy()
     expect(screen.getByText('AAAA-invalid-xdr')).toBeTruthy()
   })
 })

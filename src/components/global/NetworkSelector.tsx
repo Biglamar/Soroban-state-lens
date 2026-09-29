@@ -40,14 +40,24 @@ export default function NetworkSelector() {
   const inputRef = useRef<HTMLInputElement>(null)
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([])
   const currentTestRequestId = useRef(0)
+  const connectionTestController = useRef<AbortController | null>(null)
 
   const networkConfig = useLensStore((state) => state.networkConfig)
   const lastCustomUrl = useLensStore((state) => state.lastCustomUrl)
   const setNetworkConfig = useLensStore((state) => state.setNetworkConfig)
   const setLastCustomUrl = useLensStore((state) => state.setLastCustomUrl)
 
+  const abortCustomConnectionTest = () => {
+    currentTestRequestId.current += 1
+    connectionTestController.current?.abort()
+    connectionTestController.current = null
+    setTestStatus('idle')
+    setTestError('')
+  }
+
   useEffect(
     () => () => {
+      currentTestRequestId.current += 1
       connectionTestController.current?.abort()
       connectionTestController.current = null
     },
@@ -120,17 +130,9 @@ export default function NetworkSelector() {
     NETWORK_OPTIONS.find((opt) => opt.id === networkConfig.networkId) ||
     NETWORK_OPTIONS.find((opt) => opt.id === 'custom')!
 
-  // Initialize custom URL and passphrase when switching to custom mode
-  const abortCustomConnectionTest = () => {
-    connectionTestController.current?.abort()
-    connectionTestController.current = null
-    setTestStatus('idle')
-    setTestError('')
-  }
-
   const handleSelect = (option: NetworkInfo) => {
+    abortCustomConnectionTest()
     if (option.config) {
-      abortCustomConnectionTest()
       // Preset network: clear any custom URL usage and close everything
       setNetworkConfig(option.config)
       setShowCustomInput(false)
@@ -194,19 +196,23 @@ export default function NetworkSelector() {
       return
     }
 
+    abortCustomConnectionTest()
     const requestId = ++currentTestRequestId.current
     const rpcUrl = customRpcUrl.trim()
+    const controller = new AbortController()
+    connectionTestController.current = controller
 
     setTestStatus('loading')
     setTestError('')
 
-    const result = await testRpcConnection(rpcUrl)
-
-    if (requestId !== currentTestRequestId.current) {
-      return
-    }
-
-      if (controller.signal.aborted) {
+    try {
+      const result = await testRpcConnection(rpcUrl, {
+        signal: controller.signal,
+      })
+      if (
+        requestId !== currentTestRequestId.current ||
+        controller.signal.aborted
+      ) {
         return
       }
 
@@ -217,7 +223,10 @@ export default function NetworkSelector() {
         setTestError(result.error || 'Connection failed')
       }
     } catch (error) {
-      if (!controller.signal.aborted) {
+      if (
+        !controller.signal.aborted &&
+        requestId === currentTestRequestId.current
+      ) {
         setTestStatus('error')
         setTestError(
           error instanceof Error ? error.message : 'Connection failed',
@@ -250,7 +259,7 @@ export default function NetworkSelector() {
   }
 
   const handleCustomUrlChange = (url: string) => {
-    currentTestRequestId.current += 1
+    abortCustomConnectionTest()
     setCustomRpcUrl(url)
     const resetState = resetConnectionTestState()
     setTestStatus(resetState.status)

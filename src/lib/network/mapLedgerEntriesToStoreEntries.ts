@@ -31,27 +31,6 @@ function inferLedgerEntryType(key: string): StoreLedgerEntry['type'] {
   return 'Other'
 }
 
-function inferLedgerEntryType(key: string): StoreLedgerEntry['type'] {
-  const normalized = key.trim().toLowerCase()
-  const tokens = normalized.split('::').map((segment) => segment.trim())
-  const haystack = tokens.join('::')
-
-  if (haystack.includes('contractcode') || haystack.includes('contract_code')) {
-    return 'ContractCode'
-  }
-  if (haystack.includes('contractdata') || haystack.includes('contract_data')) {
-    return 'ContractData'
-  }
-  if (haystack.includes('account')) {
-    return 'Account'
-  }
-  if (haystack.includes('trustline')) {
-    return 'Trustline'
-  }
-
-  return 'Other'
-}
-
 function decodeDurability(key: string): StoreLedgerEntry['durability'] {
   try {
     const ledgerKey = xdr.LedgerKey.fromXDR(key, 'base64')
@@ -79,7 +58,12 @@ function decodeDurability(key: string): StoreLedgerEntry['durability'] {
 export function mapLedgerEntriesToStoreEntries(
   params: MapLedgerEntriesParams,
 ): Array<StoreLedgerEntry> {
-  const { contractId, entries, decodedValuesByKey = {} } = params
+  const {
+    contractId,
+    entries,
+    decodedValuesByKey = {},
+    decodeErrorReasonsByKey = {},
+  } = params
   return entries.map((entry) => {
     const type = inferLedgerEntryType(entry.key)
     const durability = decodeDurability(entry.key)
@@ -114,6 +98,9 @@ export function mapLedgerEntriesToStoreEntries(
       lastModifiedLedger,
       expirationLedger,
       rawXdr: entry.xdr,
+      ...(decodeErrorReasonsByKey[entry.key]
+        ? { decodeErrorReason: decodeErrorReasonsByKey[entry.key] }
+        : {}),
     }
   })
 }

@@ -13,9 +13,9 @@ describe('testRpcConnection', () => {
       .spyOn(latestLedger, 'getLatestLedgerConnectionCheck')
       .mockResolvedValue({ success: true, ledger: { sequence: 1 } })
 
-    await testRpcConnection('https://valid-rpc.com', signal)
+    await testRpcConnection('https://valid-rpc.com', { signal })
 
-    expect(spy).toHaveBeenCalledWith('https://valid-rpc.com', undefined, signal)
+    expect(spy).toHaveBeenCalledWith('https://valid-rpc.com', { signal })
   })
 
   it('should return success true for valid response', async () => {

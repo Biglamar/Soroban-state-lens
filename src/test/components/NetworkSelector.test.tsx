@@ -1,5 +1,11 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import NetworkSelector from '../../components/global/NetworkSelector'
 import * as connectionModule from '../../lib/network/testConnection'
 import { resetStore, useLensStore } from '../../store/lensStore'
@@ -265,6 +271,46 @@ describe('NetworkSelector Component', () => {
       expect(screen.getByText('Connection successful')).toBeTruthy()
     })
     expect(screen.queryByText('A failed')).toBeNull()
+  })
+
+  it('aborts the active connection test when the URL changes', () => {
+    const testConnection = vi
+      .spyOn(connectionModule, 'testRpcConnection')
+      .mockImplementation(() => new Promise(() => undefined))
+
+    render(<NetworkSelector />)
+    fireEvent.click(screen.getByRole('button', { name: /select network/i }))
+    fireEvent.click(screen.getByRole('option', { name: /custom/i }))
+
+    const input = screen.getByLabelText('Custom RPC URL input')
+    fireEvent.change(input, { target: { value: 'https://rpc-a.example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: /test connection/i }))
+
+    const signal = testConnection.mock.calls.at(-1)?.[1]?.signal
+    expect(signal).toBeInstanceOf(AbortSignal)
+    expect(signal?.aborted).toBe(false)
+
+    fireEvent.change(input, { target: { value: 'https://rpc-b.example.com' } })
+    expect(signal?.aborted).toBe(true)
+  })
+
+  it('aborts the active connection test when the component unmounts', () => {
+    const testConnection = vi
+      .spyOn(connectionModule, 'testRpcConnection')
+      .mockImplementation(() => new Promise(() => undefined))
+
+    const { unmount } = render(<NetworkSelector />)
+    fireEvent.click(screen.getByRole('button', { name: /select network/i }))
+    fireEvent.click(screen.getByRole('option', { name: /custom/i }))
+    fireEvent.change(screen.getByLabelText('Custom RPC URL input'), {
+      target: { value: 'https://rpc.example.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /test connection/i }))
+
+    const signal = testConnection.mock.calls.at(-1)?.[1]?.signal
+    expect(signal?.aborted).toBe(false)
+    unmount()
+    expect(signal?.aborted).toBe(true)
   })
 
   it('returns focus to the trigger after selecting a preset network', async () => {

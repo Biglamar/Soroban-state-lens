@@ -39,6 +39,45 @@ function isNodeLike(value: unknown): value is Node {
   )
 }
 
+export function DecodeFallbackList({
+  entries,
+}: {
+  entries: Array<LedgerEntry>
+}) {
+  if (entries.length === 0) {
+    return null
+  }
+
+  return (
+    <Card>
+      <section
+        aria-label="Undecoded entries"
+        className="space-y-4 border-t border-border-dark pt-4"
+      >
+        <Heading
+          size="sm"
+          as="h3"
+          className="text-text-muted uppercase tracking-widest text-[11px] font-bold"
+        >
+          Entries not decoded
+        </Heading>
+        <ul className="space-y-3">
+          {entries.map((entry) => (
+            <li key={entry.key} className="space-y-2">
+              <p className="text-sm text-text-muted break-words">
+                {entry.decodeErrorReason || 'Decoder worker failed'}
+              </p>
+              <code className="block rounded bg-surface-dark p-3 text-xs font-mono text-text-secondary break-all">
+                {entry.rawXdr || 'Raw XDR is not available for this entry.'}
+              </code>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </Card>
+  )
+}
+
 export function dedupeExplorerKeys(value: string): string {
   const seen = new Set<string>()
   return value
