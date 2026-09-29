@@ -150,7 +150,7 @@ export interface WatchlistItem {
 // Watchlist slice
 export interface WatchlistSlice {
   watchlist: NetworkScopedContractBuckets<Array<WatchlistItem>>
-  addToWatchlist: (contractId: string, keyPath: string) => void
+  addToWatchlist: (contractId: string, keyPath: string) => boolean
   removeFromWatchlist: (contractId: string, keyPath: string) => void
   getWatchlistForContract: (contractId: string) => Array<WatchlistItem>
   clearWatchlist: (contractId: string) => void

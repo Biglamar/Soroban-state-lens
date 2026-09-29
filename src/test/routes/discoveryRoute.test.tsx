@@ -133,6 +133,20 @@ describe('Discovery route', () => {
     expect(screen.getByText('Read-only')).toBeTruthy()
     expect(screen.getByText('Read-write')).toBeTruthy()
     expect(useLensStore.getState().networkConfig.rpcUrl).toBeTruthy()
+
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Add to watchlist' })[0],
+    )
+    expect((await screen.findByRole('status')).textContent).toBe(
+      'Added to watchlist.',
+    )
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Add to watchlist' })[0],
+    )
+    expect(screen.getByRole('status').textContent).toBe('Already in watchlist.')
+    expect(
+      useLensStore.getState().getWatchlistForContract(VALID_CONTRACT_ID),
+    ).toHaveLength(1)
   })
 
   it('shows simulation errors without displaying a successful empty state', async () => {
@@ -158,9 +172,7 @@ describe('Discovery route', () => {
       'value',
       'base64-transaction-xdr',
     )
-    expect(
-      screen.getByLabelText('Arguments (JSON reference)'),
-    ).toHaveProperty(
+    expect(screen.getByLabelText('Arguments (JSON reference)')).toHaveProperty(
       'value',
       '{"limit": 5}',
     )

@@ -682,7 +682,8 @@ const createWatchlistSlice = (
 ): WatchlistSlice => ({
   watchlist: {},
 
-  addToWatchlist: (contractId: string, keyPath: string) =>
+  addToWatchlist: (contractId: string, keyPath: string) => {
+    let added = false
     set((state) => {
       const normalizedContractId = contractId.trim()
       const normalizedKeyPath = keyPath.trim()
@@ -704,6 +705,8 @@ const createWatchlistSlice = (
         return state
       }
 
+      added = true
+
       return {
         watchlist: {
           ...state.watchlist,
@@ -720,7 +723,9 @@ const createWatchlistSlice = (
           },
         },
       }
-    }),
+    })
+    return added
+  },
 
   removeFromWatchlist: (contractId: string, keyPath: string) =>
     set((state) => {
