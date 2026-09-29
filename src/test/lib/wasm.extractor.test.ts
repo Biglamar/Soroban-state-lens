@@ -215,6 +215,23 @@ describe('wasmExtractor - extractContractspecv0', () => {
     })
   })
 
+  it('rejects malformed UTF-8 in a custom section name', () => {
+    const wasm = new Uint8Array([
+      ...createEmptyWasmModule(),
+      0x00, // Custom section ID
+      0x04, // Section size: name length plus three name bytes
+      0x03, // Name length
+      0x63,
+      0x75,
+      0xff,
+    ])
+
+    expect(extractContractspecv0(wasm)).toEqual({
+      ok: false,
+      reason: 'Malformed UTF-8 in custom section name',
+    })
+  })
+
   describe('invalid inputs', () => {
     it('should reject non-Uint8Array input', () => {
       const result1 = extractContractspecv0('not bytes')
