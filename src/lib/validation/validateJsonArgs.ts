@@ -5,36 +5,6 @@ export interface JsonArgsValidatorResult {
 }
 
 /**
- * Determines whether a discovery transaction or argument draft contains edits.
- *
- * A draft is considered dirty when it is a non-empty, non-whitespace string
- * that differs from its original value. Nullish or empty inputs are clean.
- *
- * @param draft The current draft value.
- * @param original The original value to compare against.
- * @returns True when the draft contains unsaved edits.
- */
-export function hasUnsavedDiscoveryEdits(
-  draft: unknown,
-  original: unknown = '',
-): boolean {
-  if (draft === null || draft === undefined) {
-    return false
-  }
-
-  if (typeof draft !== 'string') {
-    return true
-  }
-
-  if (draft.trim() === '') {
-    return false
-  }
-
-  const originalValue = typeof original === 'string' ? original : ''
-  return draft !== originalValue
-}
-
-/**
  * Safely parses and validates a string as JSON arguments.
  *
  * Requirements:
@@ -69,4 +39,38 @@ export function validateJsonArgs(input: unknown): JsonArgsValidatorResult {
       error: `Invalid JSON format: ${errorMessage}`,
     }
   }
+}
+
+export interface DiscoveryDraftState {
+  transaction?: unknown
+  arguments?: unknown
+}
+
+/**
+ * Determines whether a discovery draft contains unsaved edits.
+ *
+ * A draft is considered dirty when either the transaction or the arguments
+ * field has meaningful content. Whitespace-only arguments and null/undefined
+ * values are treated as clean to avoid false-positive leave warnings.
+ */
+export function hasUnsavedDiscoveryDraft(
+  draft: DiscoveryDraftState | null | undefined,
+): boolean {
+  if (!draft) {
+    return false
+  }
+
+  if (typeof draft.transaction === 'string') {
+    if (draft.transaction.trim() !== '') {
+      return true
+    }
+  } else if (draft.transaction != null) {
+    return true
+  }
+
+  if (typeof draft.arguments === 'string') {
+    return draft.arguments.trim() !== ''
+  }
+
+  return draft.arguments != null
 }

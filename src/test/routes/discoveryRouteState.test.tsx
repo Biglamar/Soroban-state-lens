@@ -91,38 +91,35 @@ describe('discovery route state', () => {
     ).toHaveLength(1)
   })
 
-  it('detects edits in discovery transaction and argument drafts', () => {
-    expect(
-      hasDiscoveryDraftEdits({
-        transactionDraft: '',
-        argumentDraft: '',
-      }),
-    ).toBe(false)
-
-    expect(
-      hasDiscoveryDraftEdits({
-        transactionDraft: '   ',
-        argumentDraft: '\n',
-      }),
-    ).toBe(false)
-
-    expect(
-      hasDiscoveryDraftEdits({
-        transactionDraft: 'invoke',
-        argumentDraft: '',
-      }),
-    ).toBe(true)
-
-    expect(
-      hasDiscoveryDraftEdits({
-        transactionDraft: '',
-        argumentDraft: '["abc"]',
-      }),
-    ).toBe(true)
-  })
-
   it('deduplicates explorer keys while preserving first-seen order', () => {
     expect(dedupeExplorerKeys('a, b, a, c, , b')).toBe('a,b,c')
     expect(dedupeExplorerKeys('  zzz ,  aaa , zzz , aaa  ')).toBe('zzz,aaa')
+  })
+
+  it('detects dirty discovery transaction drafts', () => {
+    expect(hasDiscoveryDraftEdits({ transactionDraft: '' })).toBe(false)
+    expect(hasDiscoveryDraftEdits({ transactionDraft: '   ' })).toBe(false)
+    expect(
+      hasDiscoveryDraftEdits({ transactionDraft: 'call foo()' },
+    ).toBe(true)
+  })
+
+  it('detects dirty discovery argument drafts', () => {
+    expect(hasDiscoveryDraftEdits({ argumentDraft: '' })).toBe(false)
+    expect(hasDiscoveryDraftEdits({ argumentDraft: '\n  \t' })).toBe(false)
+    expect(hasDiscoveryDraftEdits({ argumentDraft: '123' })).toBe(true)
+  })
+
+  it('warns only when a discovery draft contains edits', () => {
+    expect(hasDiscoveryDraftEdits({})).toBe(false)
+    expect(
+      hasDiscoveryDraftEdits({ transactionDraft: '', argumentDraft: '' }),
+    ).toBe(false)
+    expect(
+      hasDiscoveryDraftEdits({ transactionDraft: '', argumentDraft: 'x' }),
+    ).toBe(true)
+    expect(
+      hasDiscoveryDraftEdits({ transactionDraft: 'x', argumentDraft: '' }),
+    ).toBe(true)
   })
 })

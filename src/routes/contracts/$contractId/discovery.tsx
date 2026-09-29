@@ -9,6 +9,18 @@ import { validateContractRouteParam } from './-validateContractRouteParam'
 
 export type DiscoveryLoadStatus = 'loading' | 'empty' | 'error' | 'success'
 
+export function hasDiscoveryInputEdits(
+  input: DiscoveryInputState | undefined,
+): boolean {
+  if (!input) {
+    return false
+  }
+  return (
+    (typeof input.transaction === 'string' && input.transaction.trim() !== '') ||
+    (typeof input.arguments === 'string' && input.arguments.trim() !== '')
+  )
+}
+
 export interface DiscoveredKey {
   keyPath: string
   type: string
@@ -24,14 +36,6 @@ export interface DiscoveryLoadState {
 export interface DiscoveryInputState {
   transaction: string
   arguments: string
-}
-
-export function hasUnsavedDiscoveryInput(
-  inputState: DiscoveryInputState,
-): boolean {
-  return (
-    inputState.transaction.trim() !== '' || inputState.arguments.trim() !== ''
-  )
 }
 export function dedupeDiscoveryKeys(
   keys: Array<DiscoveredKey> | undefined,
@@ -226,22 +230,24 @@ export function DiscoveryRoute() {
   )
   const isSubmitting = state.status === 'loading'
 
-  const hasUnsavedInput = hasUnsavedDiscoveryInput(inputState)
+  const hasUnsavedEdits = useMemo(
+    () => hasDiscoveryInputEdits(inputState),
+    [inputState],
+  )
 
   useEffect(() => {
-    if (!hasUnsavedInput) return
-
+    if (!hasUnsavedEdits) {
+      return
+    }
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault()
       event.returnValue = ''
-      return ''
     }
-
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
     }
-  }, [hasUnsavedInput])
+  }, [hasUnsavedEdits])
 
   useEffect(
     () => () => {
@@ -318,7 +324,6 @@ export function DiscoveryRoute() {
           requestedKeyCount: keys.length,
         }),
       )
-      setInputState({ transaction: '', arguments: '' })
     } finally {
       if (!controller.signal.aborted) {
         activeRequest.current = null
