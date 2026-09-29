@@ -1,13 +1,8 @@
-/**
- * Validates custom section names, rejecting malformed UTF-8 bytes with a controlled error
- * instead of silently replacing invalid sequences.
- */
+/** Rejects custom section names that contain malformed UTF-8. */
 export function parseCustomSectionName(bytes: Uint8Array): string {
   try {
-    // TextDecoder with 'fatal: true' throws on invalid UTF-8 byte sequences
-    const decoder = new TextDecoder('utf-8', { fatal: true });
-    return decoder.decode(bytes);
-  } catch (error) {
-    throw new Error('ValidationError: Malformed UTF-8 sequence detected in custom section name.');
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    throw new Error('Malformed UTF-8 in custom section name')
   }
 }

@@ -2,6 +2,8 @@
  * WASM module utilities for extracting custom sections
  */
 
+import { parseCustomSectionName } from '../decoder/sectionValidator'
+
 /**
  * Result of attempting to extract a custom section from a WASM module
  */
@@ -65,7 +67,7 @@ function decodeLeb128String(
   }
 
   const bytes = data.slice(newOffset, newOffset + length)
-  const str = new TextDecoder().decode(bytes)
+  const str = parseCustomSectionName(bytes)
   return [str, newOffset + length]
 }
 
@@ -150,7 +152,19 @@ export function extractContractspecv0(
     // Custom sections have ID 0
     if (sectionId === 0) {
       // Parse custom section: name followed by payload
-      const nameResult = decodeLeb128String(wasmBytes, offset)
+      let nameResult: [string, number] | null
+      try {
+        nameResult = decodeLeb128String(wasmBytes, offset)
+      } catch (error) {
+        return {
+          ok: false,
+          reason:
+            error instanceof Error
+              ? error.message
+              : 'Malformed UTF-8 in custom section name',
+        }
+      }
+
       if (!nameResult) {
         return {
           ok: false,
