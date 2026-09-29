@@ -9,7 +9,7 @@ import {
 } from '../../../lib/tree/flattenTree'
 import { useContractLedgerPolling } from '../../../lib/network/useContractLedgerPolling'
 import { ContractLoadStatus } from '../../../store/types'
-import { useLensStore } from '../../../store/lensStore'
+import { useLensStore, useSnapshots } from '../../../store/lensStore'
 import { validateContractRouteParam } from './-validateContractRouteParam'
 import type { LedgerEntry } from '../../../store/types'
 import type { FlattenTreeRoot } from '../../../lib/tree/flatTreeRow'
@@ -168,7 +168,7 @@ function ContractExplorer() {
     [ledgerEntries],
   )
 
-  const snapshots = useLensStore((state) => state.snapshots[contractId] ?? [])
+  const snapshots = useSnapshots(contractId)
   const addSnapshot = useLensStore((state) => state.addSnapshot)
 
   const handleCaptureSnapshot = () => {

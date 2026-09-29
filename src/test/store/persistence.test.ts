@@ -5,6 +5,8 @@ import {
   clearPersistedNetworkConfig,
   isValidNetworkConfig,
   mergeNetworkConfig,
+  sanitizeNetworkSnapshots,
+  sanitizeNetworkWatchlist,
   sanitizeSnapshots,
   sanitizeWatchlist,
   serializeNetworkConfigForStorage,
@@ -239,7 +241,7 @@ describe('persistence', () => {
       }
       const result = mergeNetworkConfig(persistedState, currentState)
       expect(result.networkConfig).toEqual(DEFAULT_NETWORKS.testnet)
-      expect(result.watchlist).toEqual(watchlist)
+      expect(result.watchlist).toEqual({ testnet: watchlist })
     })
 
     it('drops invalid watchlist entries on hydration without crashing', () => {
@@ -262,7 +264,9 @@ describe('persistence', () => {
       }
       const result = mergeNetworkConfig(persistedState, currentState)
       expect(result.watchlist).toEqual({
-        C1: [{ contractId: 'C1', keyPath: 'ok', timestamp: 1 }],
+        testnet: {
+          C1: [{ contractId: 'C1', keyPath: 'ok', timestamp: 1 }],
+        },
       })
     })
   })
@@ -396,9 +400,12 @@ describe('persistence', () => {
 
         useLensStore.getState().addToWatchlist('C1', '/some/key')
 
-        const result = sanitizeWatchlist(useLensStore.getState().watchlist)
+        const result = sanitizeNetworkWatchlist(
+          useLensStore.getState().watchlist,
+          useLensStore.getState().networkConfig.networkId,
+        )
 
-        expect(result.C1).toEqual([
+        expect(result.futurenet?.C1).toEqual([
           {
             contractId: 'C1',
             keyPath: '/some/key',
@@ -414,6 +421,51 @@ describe('persistence', () => {
     it('omits contracts whose items all failed validation', () => {
       const result = sanitizeWatchlist({ C1: [{ bad: true }] })
       expect(result).toEqual({})
+    })
+
+    it('keeps valid watchlist buckets separate for each network', () => {
+      const result = sanitizeNetworkWatchlist(
+        {
+          TESTNET: {
+            C1: [{ contractId: 'C1', keyPath: 'testnet', timestamp: 1 }],
+          },
+          FUTURENET: {
+            C1: [{ contractId: 'C1', keyPath: 'futurenet', timestamp: 2 }],
+          },
+        },
+        'mainnet',
+      )
+
+      expect(result).toEqual({
+        testnet: {
+          C1: [{ contractId: 'C1', keyPath: 'testnet', timestamp: 1 }],
+        },
+        futurenet: {
+          C1: [{ contractId: 'C1', keyPath: 'futurenet', timestamp: 2 }],
+        },
+      })
+    })
+
+    it('keeps valid snapshot buckets separate for each network', () => {
+      const snapshot = (contractId: string, id: string, ledgerSequence: number) => ({
+        id,
+        contractId,
+        timestamp: 1,
+        ledgerSequence,
+        ledgerData: {},
+      })
+      const result = sanitizeNetworkSnapshots(
+        {
+          TESTNET: { C1: [snapshot('C1', 'testnet', 1)] },
+          FUTURENET: { C1: [snapshot('C1', 'futurenet', 2)] },
+        },
+        'mainnet',
+      )
+
+      expect(result).toEqual({
+        testnet: { C1: [snapshot('C1', 'testnet', 1)] },
+        futurenet: { C1: [snapshot('C1', 'futurenet', 2)] },
+      })
     })
   })
 
@@ -433,6 +485,7 @@ describe('persistence', () => {
               type: 'ContractData',
               value: { count: index },
               lastModifiedLedger: index,
+              decodeErrorReason: 'Decoder fallback used',
             },
             invalid: {
               key: 'wrong-key',
@@ -456,6 +509,9 @@ describe('persistence', () => {
       expect(sanitized.C1).toHaveLength(DEFAULT_SNAPSHOT_RETENTION_LIMIT)
       expect(sanitized.C1[0].id).toBe('snapshot-3')
       expect(Object.keys(sanitized.C1[0].ledgerData)).toEqual(['key1'])
+      expect(sanitized.C1[0].ledgerData.key1.decodeErrorReason).toBe(
+        'Decoder fallback used',
+      )
     })
   })
 

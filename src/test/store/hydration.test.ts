@@ -248,7 +248,7 @@ describe('LensStore Hydration', () => {
       mergeNetworkConfig(legacyPersistedState, {
         networkConfig: DEFAULT_NETWORKS.futurenet,
       }).snapshots,
-    ).toEqual({ C1: [snapshot] })
+    ).toEqual({ testnet: { C1: [snapshot] } })
 
     expect(
       mergeNetworkConfig(currentPersistedState, {
@@ -259,7 +259,7 @@ describe('LensStore Hydration', () => {
       mergeNetworkConfig(currentPersistedState, {
         networkConfig: DEFAULT_NETWORKS.futurenet,
       }).snapshots,
-    ).toEqual({ C1: [snapshot] })
+    ).toEqual({ mainnet: { C1: [snapshot] } })
 
     expect(
       mergeNetworkConfig(futurePersistedState, {

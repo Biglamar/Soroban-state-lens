@@ -326,7 +326,9 @@ describe('lensStore', () => {
       setActiveContractId('new-contract')
 
       expect(getStoreState().selectedKeyPath).toBeNull()
-      expect(getStoreState().snapshots['old-contract']).toHaveLength(1)
+      expect(
+        getStoreState().snapshots.futurenet?.['old-contract'],
+      ).toHaveLength(1)
       expect(getStoreState().activeContractId).toBe('new-contract')
     })
 

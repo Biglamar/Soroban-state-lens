@@ -1,6 +1,7 @@
 import { createJSONStorage } from 'zustand/middleware'
 import { parsePersistedNetworkConfig } from '../lib/storage/parsePersistedNetworkConfig'
 import { serializePersistedNetworkConfig } from '../lib/storage/serializePersistedNetworkConfig'
+import { normalizeNetworkScopeId } from './networkScope'
 import {
   BigIntDisplayMode,
   ByteDisplayMode,
@@ -14,6 +15,7 @@ import type {
   DisplayPreferences,
   LedgerEntry,
   NetworkConfig,
+  NetworkScopedContractBuckets,
   WatchlistItem,
 } from './types'
 import type { PersistedNetworkConfig } from '../lib/storage/serializePersistedNetworkConfig'
@@ -41,8 +43,8 @@ export const DEFAULT_NETWORK_CONFIG: NetworkConfig = DEFAULT_NETWORKS.futurenet
 export interface PersistedState {
   networkConfig: PersistedNetworkConfig
   preferences: DisplayPreferences
-  watchlist?: Record<string, Array<WatchlistItem>>
-  snapshots?: Record<string, Array<ContractSnapshot>>
+  watchlist?: NetworkScopedContractBuckets<Array<WatchlistItem>>
+  snapshots?: NetworkScopedContractBuckets<Array<ContractSnapshot>>
 }
 
 /**
@@ -205,24 +207,11 @@ export function mergeNetworkConfig(
   currentState: { networkConfig: NetworkConfig },
 ): {
   networkConfig: NetworkConfig
-  watchlist: Record<string, Array<WatchlistItem>>
-  snapshots: Record<string, Array<ContractSnapshot>>
+  watchlist: NetworkScopedContractBuckets<Array<WatchlistItem>>
+  snapshots: NetworkScopedContractBuckets<Array<ContractSnapshot>>
 } {
   const hydratedState = unwrapPersistedState(persistedState)
-  const watchlist = sanitizeWatchlist(
-    hydratedState &&
-      typeof hydratedState === 'object' &&
-      'watchlist' in hydratedState
-      ? hydratedState.watchlist
-      : undefined,
-  )
-  const snapshots = sanitizeSnapshots(
-    hydratedState &&
-      typeof hydratedState === 'object' &&
-      'snapshots' in hydratedState
-      ? hydratedState.snapshots
-      : undefined,
-  )
+  let networkConfig = currentState.networkConfig
 
   if (hydratedState && 'networkConfig' in hydratedState) {
     const parsedNetworkConfig = parsePersistedNetworkConfig(
@@ -230,24 +219,59 @@ export function mergeNetworkConfig(
     )
 
     if (isValidNetworkConfig(parsedNetworkConfig)) {
-      return {
-        networkConfig: parsedNetworkConfig,
-        watchlist,
-        snapshots,
-      }
+      networkConfig = parsedNetworkConfig
+    } else {
+      console.warn(
+        '[LensStore] Persisted network config is invalid, falling back to default',
+        hydratedState.networkConfig,
+      )
     }
-
-    console.warn(
-      '[LensStore] Persisted network config is invalid, falling back to default',
-      hydratedState.networkConfig,
-    )
   }
 
   return {
-    networkConfig: currentState.networkConfig,
-    watchlist,
-    snapshots,
+    networkConfig,
+    watchlist: sanitizeNetworkWatchlist(
+        hydratedState &&
+        typeof hydratedState === 'object' &&
+        'watchlist' in hydratedState
+        ? hydratedState.watchlist
+        : undefined,
+      networkConfig.networkId,
+    ),
+    snapshots: sanitizeNetworkSnapshots(
+      hydratedState &&
+        typeof hydratedState === 'object' &&
+        'snapshots' in hydratedState
+        ? hydratedState.snapshots
+        : undefined,
+      networkConfig.networkId,
+    ),
   }
+}
+
+export function sanitizeNetworkWatchlist(
+  value: unknown,
+  legacyNetworkId: string,
+): NetworkScopedContractBuckets<Array<WatchlistItem>> {
+  if (typeof value !== 'object' || value === null) {
+    return {}
+  }
+
+  const source = value as Record<string, unknown>
+  const legacyWatchlist = sanitizeWatchlist(value)
+  if (Object.keys(legacyWatchlist).length > 0) {
+    return { [normalizeNetworkScopeId(legacyNetworkId)]: legacyWatchlist }
+  }
+
+  const networkScoped: Record<string, Record<string, Array<WatchlistItem>>> = {}
+  for (const [networkId, contracts] of Object.entries(source)) {
+    if (typeof contracts !== 'object' || contracts === null) continue
+    const validContracts = sanitizeWatchlist(contracts)
+    if (Object.keys(validContracts).length > 0) {
+      networkScoped[normalizeNetworkScopeId(networkId)] = validContracts
+    }
+  }
+  return networkScoped
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -290,7 +314,9 @@ function sanitizeSnapshotLedgerData(
         (typeof item.expirationLedger !== 'number' ||
           !Number.isSafeInteger(item.expirationLedger) ||
           item.expirationLedger < 0)) ||
-      ('rawXdr' in item && typeof item.rawXdr !== 'string')
+      ('rawXdr' in item && typeof item.rawXdr !== 'string') ||
+      ('decodeErrorReason' in item &&
+        typeof item.decodeErrorReason !== 'string')
     ) {
       continue
     }
@@ -308,6 +334,9 @@ function sanitizeSnapshotLedgerData(
         ? {}
         : { expirationLedger: item.expirationLedger as number }),
       ...(typeof item.rawXdr === 'string' ? { rawXdr: item.rawXdr } : {}),
+      ...(typeof item.decodeErrorReason === 'string'
+        ? { decodeErrorReason: item.decodeErrorReason.slice(0, 500) }
+        : {}),
     }
   }
   return entries
@@ -382,6 +411,29 @@ export function sanitizeSnapshots(
     if (retained.length > 0) snapshots[contractId] = retained
   }
   return snapshots
+}
+
+export function sanitizeNetworkSnapshots(
+  value: unknown,
+  legacyNetworkId: string,
+): NetworkScopedContractBuckets<Array<ContractSnapshot>> {
+  if (!isRecord(value)) return {}
+
+  const legacySnapshots = sanitizeSnapshots(value)
+  if (Object.keys(legacySnapshots).length > 0) {
+    return { [normalizeNetworkScopeId(legacyNetworkId)]: legacySnapshots }
+  }
+
+  const networkScoped: Record<string, Record<string, Array<ContractSnapshot>>> =
+    {}
+  for (const [networkId, snapshots] of Object.entries(value)) {
+    if (!isRecord(snapshots)) continue
+    const validSnapshots = sanitizeSnapshots(snapshots)
+    if (Object.keys(validSnapshots).length > 0) {
+      networkScoped[normalizeNetworkScopeId(networkId)] = validSnapshots
+    }
+  }
+  return networkScoped
 }
 
 /**

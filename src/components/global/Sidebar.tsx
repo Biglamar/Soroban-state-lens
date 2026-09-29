@@ -15,7 +15,8 @@ import { downloadSnapshotDiff } from '../../lib/diff/exportSnapshotDiff'
 import { resolveDiffStatus } from '../../lib/diff/resolveDiffStatus'
 import { formatContractIdShort } from '../../lib/format/formatContractIdShort'
 import { formatLedgerSequence } from '../../lib/format/formatLedgerSequence'
-import { useLensStore } from '../../store/lensStore'
+import { useLensStore, useSnapshots } from '../../store/lensStore'
+import type { LedgerEntry } from '../../store/types'
 
 interface SidebarProps {
   open: boolean
@@ -24,7 +25,7 @@ interface SidebarProps {
   activeNavItem?: string
 }
 
-const EMPTY_ARRAY: Array<any> = []
+const EMPTY_LEDGER_ENTRIES: Array<LedgerEntry> = []
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
@@ -288,12 +289,7 @@ export default function Sidebar({
  */
 function HistoryPanel() {
   const activeContractId = useLensStore((state) => state.activeContractId)
-  const allSnapshots = useLensStore((state) => state.snapshots)
-
-  const snapshots = useMemo(() => {
-    if (!activeContractId) return EMPTY_ARRAY
-    return allSnapshots[activeContractId] ?? EMPTY_ARRAY
-  }, [allSnapshots, activeContractId])
+  const snapshots = useSnapshots(activeContractId ?? '')
 
   const addSnapshot = useLensStore((state) => state.addSnapshot)
   const removeSnapshot = useLensStore((state) => state.removeSnapshot)
@@ -304,7 +300,7 @@ function HistoryPanel() {
     (state) => state.currentLedgerSequence,
   )
   const ledgerEntries = useMemo(() => {
-    if (!activeContractId) return EMPTY_ARRAY
+    if (!activeContractId) return EMPTY_LEDGER_ENTRIES
     const entries = Object.values(ledgerData).filter(
       (entry) => entry.contractId === activeContractId,
     )
@@ -363,14 +359,16 @@ function HistoryPanel() {
     let unchanged = 0
 
     for (const key of allKeys) {
+      const hasEntryA = Object.hasOwn(prev.ledgerData, key)
+      const hasEntryB = Object.hasOwn(next.ledgerData, key)
       const entryA = prev.ledgerData[key]
       const entryB = next.ledgerData[key]
 
-      if (entryA === undefined && entryB !== undefined) {
+      if (!hasEntryA && hasEntryB) {
         created++
-      } else if (entryA !== undefined && entryB === undefined) {
+      } else if (hasEntryA && !hasEntryB) {
         deleted++
-      } else if (entryA !== undefined && entryB !== undefined) {
+      } else if (hasEntryA && hasEntryB) {
         const status = resolveDiffStatus(entryA.value, entryB.value)
         if (status === 'changed') {
           modified++
