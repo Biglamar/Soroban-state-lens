@@ -173,12 +173,12 @@ describe('Watchlist Slice', () => {
 
     expect(watchlist).toHaveLength(2)
     expect(watchlist[0]).toMatchObject({
-      keyPath: '/state/key1',
-      timestamp: 1,
-    })
-    expect(watchlist[1]).toMatchObject({
       keyPath: '/state/key2',
       timestamp: 3,
+    })
+    expect(watchlist[1]).toMatchObject({
+      keyPath: '/state/key1',
+      timestamp: 2,
     })
   })
 
@@ -213,8 +213,8 @@ describe('Watchlist Slice', () => {
 
     expect(watchlist).toHaveLength(2)
     expect(watchlist.map((item) => item.keyPath)).toEqual([
-      '/state/key1',
       '/state/key3',
+      '/state/key1',
     ])
     expect(watchlist.every((item) => item.contractId === 'contract-1')).toBe(
       true,
@@ -246,5 +246,24 @@ describe('Watchlist Slice', () => {
       .getWatchlistForContract('contract-1')
 
     expect(watchlist).toHaveLength(0)
+  })
+
+  it('returns newest pins first and breaks timestamp ties by key path', () => {
+    useLensStore.setState({
+      watchlist: {
+        'contract-1': [
+          { contractId: 'contract-1', keyPath: '/z', timestamp: 2 },
+          { contractId: 'contract-1', keyPath: '/b', timestamp: 3 },
+          { contractId: 'contract-1', keyPath: '/a', timestamp: 3 },
+        ],
+      },
+    })
+
+    expect(
+      useLensStore
+        .getState()
+        .getWatchlistForContract('contract-1')
+        .map(({ keyPath }) => keyPath),
+    ).toEqual(['/a', '/b', '/z'])
   })
 })

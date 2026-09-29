@@ -482,7 +482,11 @@ export function sanitizeWatchlist(
     }
 
     if (validItems.length > 0) {
-      sanitized[contractId] = validItems
+      sanitized[contractId] = validItems.sort(
+        (left, right) =>
+          right.timestamp - left.timestamp ||
+          left.keyPath.localeCompare(right.keyPath),
+      )
     }
   }
 

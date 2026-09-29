@@ -303,6 +303,22 @@ describe('persistence', () => {
       expect(result.C1[0].keyPath).toBe('k')
     })
 
+    it('sorts hydrated pins newest first with a key-path tie break', () => {
+      const result = sanitizeWatchlist({
+        C1: [
+          { contractId: 'C1', keyPath: '/z', timestamp: 2 },
+          { contractId: 'C1', keyPath: '/b', timestamp: 3 },
+          { contractId: 'C1', keyPath: '/a', timestamp: 3 },
+        ],
+      })
+
+      expect(result.C1.map(({ keyPath }) => keyPath)).toEqual([
+        '/a',
+        '/b',
+        '/z',
+      ])
+    })
+
     it('drops future-dated items while preserving present and past items', () => {
       vi.useFakeTimers()
       vi.setSystemTime(new Date('2026-07-27T12:00:00.000Z'))
@@ -314,13 +330,13 @@ describe('persistence', () => {
           C1: [
             {
               contractId: 'C1',
-              keyPath: 'past',
-              timestamp: now - 1,
+              keyPath: 'present',
+              timestamp: now,
             },
             {
               contractId: 'C1',
-              keyPath: 'present',
-              timestamp: now,
+              keyPath: 'past',
+              timestamp: now - 1,
             },
             {
               contractId: 'C1',
@@ -334,13 +350,13 @@ describe('persistence', () => {
           C1: [
             {
               contractId: 'C1',
-              keyPath: 'past',
-              timestamp: now - 1,
+              keyPath: 'present',
+              timestamp: now,
             },
             {
               contractId: 'C1',
-              keyPath: 'present',
-              timestamp: now,
+              keyPath: 'past',
+              timestamp: now - 1,
             },
           ],
         })
