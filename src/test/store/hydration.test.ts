@@ -41,6 +41,79 @@ describe('LensStore Hydration', () => {
       networkConfig: DEFAULT_NETWORKS.futurenet,
       ledgerData: {},
       expandedNodes: [],
+      snapshots: {},
+      watchlist: {},
+    })
+  })
+
+  it('restores valid snapshots and drops malformed snapshots on hydration', async () => {
+    const timestamp = Date.now() - 100
+    const validSnapshot = {
+      id: 'snapshot-valid',
+      contractId: 'C1',
+      timestamp,
+      ledgerSequence: 10,
+      ledgerData: {
+        key1: {
+          key: 'key1',
+          contractId: 'C1',
+          type: 'ContractData',
+          value: { count: 3 },
+          lastModifiedLedger: 9,
+        },
+      },
+      label: 'Saved state',
+    }
+    const malformedSnapshot = {
+      ...validSnapshot,
+      id: 'snapshot-malformed',
+      ledgerData: [],
+    }
+    localStorage.setItem(
+      NETWORK_CONFIG_STORAGE_KEY,
+      JSON.stringify({
+        state: {
+          networkConfig: { kind: 'preset', networkId: 'testnet' },
+          snapshots: { C1: [validSnapshot, malformedSnapshot] },
+        },
+        version: 1,
+      }),
+    )
+
+    await useLensStore.persist.rehydrate()
+
+    expect(useLensStore.getState().getSnapshots('C1')).toEqual([validSnapshot])
+  })
+
+  it('persists snapshots and restores them after a store reload', async () => {
+    useLensStore.getState().addSnapshot(
+      'C1',
+      {
+        key1: {
+          key: 'key1',
+          contractId: 'C1',
+          type: 'ContractData',
+          value: { count: 4 },
+          lastModifiedLedger: 11,
+        },
+      },
+      12,
+      'Persisted snapshot',
+    )
+
+    const savedState = localStorage.getItem(NETWORK_CONFIG_STORAGE_KEY)
+    expect(savedState).not.toBeNull()
+    if (savedState === null) throw new Error('Snapshot state was not saved')
+    useLensStore.setState({ snapshots: {} })
+    localStorage.setItem(NETWORK_CONFIG_STORAGE_KEY, savedState)
+
+    await useLensStore.persist.rehydrate()
+
+    expect(useLensStore.getState().getSnapshots('C1')).toHaveLength(1)
+    expect(useLensStore.getState().getSnapshots('C1')[0]).toMatchObject({
+      contractId: 'C1',
+      ledgerSequence: 12,
+      label: 'Persisted snapshot',
     })
   })
 
@@ -128,12 +201,20 @@ describe('LensStore Hydration', () => {
   })
 
   it('accepts legacy and current persisted versions while ignoring future ones', () => {
+    const snapshot = {
+      id: 'snapshot-1',
+      contractId: 'C1',
+      timestamp: 1,
+      ledgerSequence: 1,
+      ledgerData: {},
+    }
     const legacyPersistedState = {
       state: {
         networkConfig: {
           kind: 'preset',
           networkId: 'testnet',
         },
+        snapshots: { C1: [snapshot] },
       },
       version: 0,
     }
@@ -143,6 +224,7 @@ describe('LensStore Hydration', () => {
           kind: 'preset',
           networkId: 'mainnet',
         },
+        snapshots: { C1: [snapshot] },
       },
       version: 1,
     }
@@ -152,6 +234,7 @@ describe('LensStore Hydration', () => {
           kind: 'preset',
           networkId: 'futurenet',
         },
+        snapshots: { C1: [snapshot] },
       },
       version: 999,
     }
@@ -161,18 +244,33 @@ describe('LensStore Hydration', () => {
         networkConfig: DEFAULT_NETWORKS.futurenet,
       }).networkConfig,
     ).toEqual(DEFAULT_NETWORKS.testnet)
+    expect(
+      mergeNetworkConfig(legacyPersistedState, {
+        networkConfig: DEFAULT_NETWORKS.futurenet,
+      }).snapshots,
+    ).toEqual({ C1: [snapshot] })
 
     expect(
       mergeNetworkConfig(currentPersistedState, {
         networkConfig: DEFAULT_NETWORKS.futurenet,
       }).networkConfig,
     ).toEqual(DEFAULT_NETWORKS.mainnet)
+    expect(
+      mergeNetworkConfig(currentPersistedState, {
+        networkConfig: DEFAULT_NETWORKS.futurenet,
+      }).snapshots,
+    ).toEqual({ C1: [snapshot] })
 
     expect(
       mergeNetworkConfig(futurePersistedState, {
         networkConfig: DEFAULT_NETWORKS.futurenet,
       }).networkConfig,
     ).toEqual(DEFAULT_NETWORKS.futurenet)
+    expect(
+      mergeNetworkConfig(futurePersistedState, {
+        networkConfig: DEFAULT_NETWORKS.futurenet,
+      }).snapshots,
+    ).toEqual({})
   })
 
   it('falls back to default network when storage contains unknown keys', async () => {

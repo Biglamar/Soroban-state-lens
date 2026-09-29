@@ -18,6 +18,7 @@ import {
   createSafeStorage,
   mergeNetworkConfig,
   mergePreferences,
+  sanitizeSnapshots,
   serializeNetworkConfigForStorage,
 } from './persistence'
 import { createPreferencesSlice } from './preferencesSlice'
@@ -26,6 +27,7 @@ import {
   ContractLoadStatus,
   DEFAULT_NETWORKS,
   DEFAULT_PREFERENCES,
+  DEFAULT_SNAPSHOT_RETENTION_LIMIT,
 } from './types'
 
 import type * as Comlink from 'comlink'
@@ -232,7 +234,7 @@ const createExpandedNodesSlice = (
     })),
 })
 
-export const DEFAULT_SNAPSHOT_RETENTION_LIMIT = 25
+export { DEFAULT_SNAPSHOT_RETENTION_LIMIT } from './types'
 
 /**
  * Snapshot slice creator
@@ -280,8 +282,14 @@ const createSnapshotSlice = (
         label: normalizedLabel,
       }
 
+      const retentionLimit = Math.min(
+        maxSnapshots,
+        DEFAULT_SNAPSHOT_RETENTION_LIMIT,
+      )
       const trimmedSnapshots =
-        maxSnapshots > 0 ? [...existing, nextSnapshot].slice(-maxSnapshots) : []
+        retentionLimit > 0
+          ? [...existing, nextSnapshot].slice(-retentionLimit)
+          : []
 
       return {
         snapshots: {
@@ -643,7 +651,7 @@ const createWatchlistSlice = (
 })
 
 /**
- * Combined Lens Store with persistence for networkConfig and preferences
+ * Combined Lens Store with persistence for networkConfig, preferences, watchlist, and snapshots
  *
  * Centralized state management for Soroban State Lens.
  * Includes slices for:
@@ -653,6 +661,7 @@ const createWatchlistSlice = (
  * - expandedNodes: Tree view expansion state (NOT persisted)
  * - contractLoadStatus: Contract fetch lifecycle (NOT persisted)
  * - watchlist: Pinned keys for quick access (PERSISTED)
+ * - snapshots: Bounded contract history (PERSISTED)
  */
 export const useLensStore = create<LensStore>()(
   persist<LensStore, [], [], PersistedState>(
@@ -687,13 +696,15 @@ export const useLensStore = create<LensStore>()(
           ),
           preferences: DEFAULT_PREFERENCES,
           watchlist: {},
+          snapshots: {},
         }
       },
-      // Persist networkConfig, preferences, and the watchlist
+      // Persist networkConfig, preferences, watchlist, and bounded snapshots
       partialize: (state): PersistedState => ({
         networkConfig: serializeNetworkConfigForStorage(state.networkConfig),
         preferences: state.preferences,
         watchlist: state.watchlist,
+        snapshots: sanitizeSnapshots(state.snapshots),
       }),
       // Validate and merge persisted data safely
       merge: (persistedState, currentState) => {

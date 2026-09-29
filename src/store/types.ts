@@ -86,6 +86,8 @@ export interface ContractSnapshot {
   label?: string
 }
 
+export const DEFAULT_SNAPSHOT_RETENTION_LIMIT = 25
+
 // Snapshot slice
 export interface SnapshotSlice {
   snapshots: Record<string, Array<ContractSnapshot>>
