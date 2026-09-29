@@ -11,6 +11,7 @@ import { useContractLedgerPolling } from '../../../lib/network/useContractLedger
 import { ContractLoadStatus } from '../../../store/types'
 import { useLensStore } from '../../../store/lensStore'
 import { validateContractRouteParam } from './-validateContractRouteParam'
+import type { LedgerEntry } from '../../../store/types'
 import type { FlattenTreeRoot } from '../../../lib/tree/flatTreeRow'
 import type { Node } from '../../../types/node'
 
@@ -35,6 +36,45 @@ function isNodeLike(value: unknown): value is Node {
     value !== null &&
     'kind' in value &&
     typeof (value as { kind: unknown }).kind === 'string'
+  )
+}
+
+export function DecodeFallbackList({
+  entries,
+}: {
+  entries: Array<LedgerEntry>
+}) {
+  if (entries.length === 0) {
+    return null
+  }
+
+  return (
+    <Card>
+      <section
+        aria-label="Undecoded entries"
+        className="space-y-4 border-t border-border-dark pt-4"
+      >
+        <Heading
+          size="sm"
+          as="h3"
+          className="text-text-muted uppercase tracking-widest text-[11px] font-bold"
+        >
+          Entries not decoded
+        </Heading>
+        <ul className="space-y-3">
+          {entries.map((entry) => (
+            <li key={entry.key} className="space-y-2">
+              <p className="text-sm text-text-muted break-words">
+                {entry.decodeErrorReason || 'Decoder worker failed'}
+              </p>
+              <code className="block rounded bg-surface-dark p-3 text-xs font-mono text-text-secondary break-all">
+                {entry.rawXdr || 'Raw XDR is not available for this entry.'}
+              </code>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </Card>
   )
 }
 
@@ -111,6 +151,10 @@ function ContractExplorer() {
     )
     return entries.sort((a, b) => a.key.localeCompare(b.key))
   }, [ledgerData, contractId])
+  const decodeFallbackEntries = useMemo(
+    () => ledgerEntries.filter((entry) => entry.decodeErrorReason),
+    [ledgerEntries],
+  )
 
   const snapshots = useLensStore((state) => state.snapshots[contractId] ?? [])
   const addSnapshot = useLensStore((state) => state.addSnapshot)
@@ -347,6 +391,8 @@ function ContractExplorer() {
                 onActivateRow={(row) => handleActivateRow(row.keyPath)}
               />
             )}
+
+            <DecodeFallbackList entries={decodeFallbackEntries} />
           </div>
         </Card>
       )}
