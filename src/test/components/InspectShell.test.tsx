@@ -146,6 +146,30 @@ describe('InspectShell', () => {
     expect(addToWatchlist).toHaveBeenCalledWith('C123', '/state/ledger')
   })
 
+  it('shows feedback when the pinned key already exists', () => {
+    useLensStore.setState({
+      watchlist: {
+        C123: [{ contractId: 'C123', keyPath: '/state/ledger', timestamp: 1 }],
+      },
+      ledgerData: { [storedEntry.key]: storedEntry },
+    })
+
+    render(
+      <InspectShell
+        contractId="C123"
+        normalizedContractId="C123"
+        keyPath="/state/ledger"
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add to watchlist' }))
+
+    expect(screen.getByRole('status').textContent).toBe('Already in watchlist.')
+    expect(
+      useLensStore.getState().getWatchlistForContract('C123'),
+    ).toHaveLength(1)
+  })
+
   it('copies the selected entry raw XDR', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })

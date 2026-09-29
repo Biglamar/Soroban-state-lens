@@ -28,6 +28,14 @@ describe('Watchlist Slice', () => {
     expect(watchlist).toHaveLength(1)
   })
 
+  it('reports whether an item was added or already existed', () => {
+    const { addToWatchlist } = useLensStore.getState()
+
+    expect(addToWatchlist('contract-1', '/path/to/key')).toBe(true)
+    expect(addToWatchlist('contract-1', '/path/to/key')).toBe(false)
+    expect(addToWatchlist(' ', '/path/to/key')).toBe(false)
+  })
+
   it('should handle multiple keys for same contract', () => {
     const { addToWatchlist, getWatchlistForContract } = useLensStore.getState()
 
@@ -83,7 +91,8 @@ describe('Watchlist Slice', () => {
   })
 
   it('does nothing for unknown contracts or key paths', () => {
-    const { removeFromWatchlist, getWatchlistForContract } = useLensStore.getState()
+    const { removeFromWatchlist, getWatchlistForContract } =
+      useLensStore.getState()
 
     removeFromWatchlist('unknown-contract', '/path/to/key')
 

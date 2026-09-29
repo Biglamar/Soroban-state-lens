@@ -35,6 +35,7 @@ export function InspectShell({
     ),
   )
   const [copied, setCopied] = useState(false)
+  const [watchlistFeedback, setWatchlistFeedback] = useState('')
   const copiedResetTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -47,7 +48,10 @@ export function InspectShell({
 
   const handlePinKey = () => {
     if (entry && keyPath) {
-      addToWatchlist(contractId, entry.key)
+      const added = addToWatchlist(contractId, entry.key)
+      setWatchlistFeedback(
+        added ? 'Added to watchlist.' : 'Already in watchlist.',
+      )
     }
   }
 
@@ -103,6 +107,12 @@ export function InspectShell({
           />
         </div>
       </header>
+
+      {watchlistFeedback ? (
+        <p role="status" aria-live="polite" className="text-sm text-text-muted">
+          {watchlistFeedback}
+        </p>
+      ) : null}
 
       <nav
         aria-label="Inspect breadcrumb"

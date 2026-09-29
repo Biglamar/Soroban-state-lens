@@ -210,6 +210,7 @@ export function DiscoveryRoute() {
   })
   const { transaction } = inputState
   const [attemptedSubmit, setAttemptedSubmit] = useState(false)
+  const [watchlistFeedback, setWatchlistFeedback] = useState('')
   const [simulatedFunction, setSimulatedFunction] = useState('')
   const activeRequest = useRef<AbortController | null>(null)
   const [state, setState] = useState(() =>
@@ -244,7 +245,10 @@ export function DiscoveryRoute() {
   }
 
   const handlePinKey = (keyPath: string) => {
-    addToWatchlist(contractId, keyPath)
+    const added = addToWatchlist(contractId, keyPath)
+    setWatchlistFeedback(
+      added ? 'Added to watchlist.' : 'Already in watchlist.',
+    )
   }
 
   const runSimulation = async (
@@ -311,6 +315,11 @@ export function DiscoveryRoute() {
 
   return (
     <div className="flex flex-col gap-6 p-6 lg:p-10 max-w-6xl mx-auto w-full">
+      {watchlistFeedback ? (
+        <p role="status" aria-live="polite" className="text-sm text-text-muted">
+          {watchlistFeedback}
+        </p>
+      ) : null}
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-border-dark pb-6">
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
