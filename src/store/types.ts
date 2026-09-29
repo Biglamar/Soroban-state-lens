@@ -31,6 +31,7 @@ export interface LedgerEntry {
   lastModifiedLedger: number
   expirationLedger?: number
   rawXdr?: string
+  decodeErrorReason?: string
 }
 
 // Map of ledger entries by key
