@@ -7,11 +7,15 @@ import {
   collectExpandableNodeIds,
   flattenTree,
 } from '../../../lib/tree/flattenTree'
+import { useContractLedgerPolling } from '../../../lib/network/useContractLedgerPolling'
 import { ContractLoadStatus } from '../../../store/types'
-import { useLensStore } from '../../../store/lensStore'
+import { useLensStore, useSnapshots } from '../../../store/lensStore'
 import { validateContractRouteParam } from './-validateContractRouteParam'
+import type { LedgerEntry } from '../../../store/types'
 import type { FlattenTreeRoot } from '../../../lib/tree/flatTreeRow'
 import type { Node } from '../../../types/node'
+
+const EMPTY_EXPANDED_NODES: Array<string> = []
 
 export function resolveSelectedKeyPath(
   selectedKeyPath: string | null,
@@ -34,6 +38,45 @@ function isNodeLike(value: unknown): value is Node {
     value !== null &&
     'kind' in value &&
     typeof (value as { kind: unknown }).kind === 'string'
+  )
+}
+
+export function DecodeFallbackList({
+  entries,
+}: {
+  entries: Array<LedgerEntry>
+}) {
+  if (entries.length === 0) {
+    return null
+  }
+
+  return (
+    <Card>
+      <section
+        aria-label="Undecoded entries"
+        className="space-y-4 border-t border-border-dark pt-4"
+      >
+        <Heading
+          size="sm"
+          as="h3"
+          className="text-text-muted uppercase tracking-widest text-[11px] font-bold"
+        >
+          Entries not decoded
+        </Heading>
+        <ul className="space-y-3">
+          {entries.map((entry) => (
+            <li key={entry.key} className="space-y-2">
+              <p className="text-sm text-text-muted break-words">
+                {entry.decodeErrorReason || 'Decoder worker failed'}
+              </p>
+              <code className="block rounded bg-surface-dark p-3 text-xs font-mono text-text-secondary break-all">
+                {entry.rawXdr || 'Raw XDR is not available for this entry.'}
+              </code>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </Card>
   )
 }
 
@@ -86,10 +129,24 @@ function ContractExplorer() {
   const loadContract = useLensStore((state) => state.loadContract)
   const contractLoadStatus = useLensStore((state) => state.contractLoadStatus)
   const contractLoadError = useLensStore((state) => state.contractLoadError)
-  const expandedNodes = useLensStore((state) => state.expandedNodes)
-  const toggleExpanded = useLensStore((state) => state.toggleExpanded)
-  const expandAll = useLensStore((state) => state.expandAll)
-  const collapseAll = useLensStore((state) => state.collapseAll)
+  const contractLoadAttemptCount = useLensStore(
+    (state) => state.contractLoadAttemptCount,
+  )
+  const rpcUrl = useLensStore((state) => state.networkConfig.rpcUrl)
+  const expandedNodes = useLensStore(
+    (state) =>
+      state.expandedNodesByContract[normalizedContractId] ??
+      EMPTY_EXPANDED_NODES,
+  )
+  const toggleExpandedForContract = useLensStore(
+    (state) => state.toggleExpandedForContract,
+  )
+  const expandAllForContract = useLensStore(
+    (state) => state.expandAllForContract,
+  )
+  const collapseAllForContract = useLensStore(
+    (state) => state.collapseAllForContract,
+  )
   const selectedKeyPath = useLensStore((state) => state.selectedKeyPath)
   const setSelectedKeyPath = useLensStore((state) => state.setSelectedKeyPath)
   const clearSelectedKeyPath = useLensStore(
@@ -97,30 +154,39 @@ function ContractExplorer() {
   )
 
   const ledgerData = useLensStore((state) => state.ledgerData)
+  const currentLedgerSequence = useLensStore(
+    (state) => state.currentLedgerSequence,
+  )
   const ledgerEntries = useMemo(() => {
     const entries = Object.values(ledgerData).filter(
       (entry) => entry.contractId === contractId,
     )
     return entries.sort((a, b) => a.key.localeCompare(b.key))
   }, [ledgerData, contractId])
+  const decodeFallbackEntries = useMemo(
+    () => ledgerEntries.filter((entry) => entry.decodeErrorReason),
+    [ledgerEntries],
+  )
 
-  const snapshots = useLensStore((state) => state.snapshots[contractId] ?? [])
+  const snapshots = useSnapshots(contractId)
   const addSnapshot = useLensStore((state) => state.addSnapshot)
 
   const handleCaptureSnapshot = () => {
     if (ledgerEntries.length === 0) return
-    const entriesDict: Record<string, typeof ledgerEntries[0]> = {}
+    const entriesDict: Record<string, (typeof ledgerEntries)[0]> = {}
     ledgerEntries.forEach((entry) => {
       entriesDict[entry.key] = entry
     })
     const label = `Snapshot #${snapshots.length + 1}`
-    addSnapshot(contractId, entriesDict, label)
+    addSnapshot(contractId, entriesDict, currentLedgerSequence, label)
   }
 
   const keys = useMemo(
     () => dedupeExplorerKeys(search.keys).split(',').filter(Boolean),
     [search.keys],
   )
+
+  useContractLedgerPolling({ contractId, keys, rpcUrl, loadContract })
 
   const treeRoots = useMemo<Array<FlattenTreeRoot>>(
     () =>
@@ -151,11 +217,11 @@ function ContractExplorer() {
   )
 
   const handleExpandAll = () => {
-    expandAll(expandableNodeIds)
+    expandAllForContract(normalizedContractId, expandableNodeIds)
   }
 
   const handleCollapseAll = () => {
-    collapseAll()
+    collapseAllForContract(normalizedContractId)
   }
 
   useEffect(() => {
@@ -241,9 +307,7 @@ function ContractExplorer() {
         </div>
       </header>
 
-      {contractLoadStatus === ContractLoadStatus.LOADING && (
-        <LoadingSkeleton />
-      )}
+      {contractLoadStatus === ContractLoadStatus.LOADING && <LoadingSkeleton />}
 
       {contractLoadStatus === ContractLoadStatus.EMPTY && (
         <Card>
@@ -275,6 +339,11 @@ function ContractExplorer() {
             <p className="text-text-muted text-sm">
               {contractLoadError || 'An unknown error occurred while loading.'}
             </p>
+            {contractLoadAttemptCount !== null && (
+              <p className="text-text-muted text-xs">
+                Request attempts: {contractLoadAttemptCount}
+              </p>
+            )}
             <div>
               <Button
                 id={errorRetryButtonId}
@@ -329,11 +398,15 @@ function ContractExplorer() {
               <VirtualizedTreeList
                 rows={flatRows}
                 expandedNodeIds={expandedNodes}
-                onToggleExpand={toggleExpanded}
+                onToggleExpand={(nodeId) =>
+                  toggleExpandedForContract(normalizedContractId, nodeId)
+                }
                 selectedRowId={selectedKeyPath}
                 onActivateRow={(row) => handleActivateRow(row.keyPath)}
               />
             )}
+
+            <DecodeFallbackList entries={decodeFallbackEntries} />
           </div>
         </Card>
       )}

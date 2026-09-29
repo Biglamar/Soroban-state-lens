@@ -9,6 +9,8 @@ export type ExtractSectionResult =
   | { ok: true; payload: Uint8Array }
   | { ok: false; reason: string }
 
+export const MAX_CONTRACT_SPEC_PAYLOAD_BYTES = 1024 * 1024
+
 /**
  * Decodes a LEB128-encoded unsigned integer from a Uint8Array
  * @param data - The byte array to read from
@@ -163,6 +165,13 @@ export function extractContractspecv0(
         // Return everything after the name as the payload
         const payloadStart = afterNameOffset
         const payloadEnd = offset + sectionSize
+
+        if (payloadEnd - payloadStart > MAX_CONTRACT_SPEC_PAYLOAD_BYTES) {
+          return {
+            ok: false,
+            reason: `contractspecv0 payload exceeds ${MAX_CONTRACT_SPEC_PAYLOAD_BYTES} bytes`,
+          }
+        }
 
         if (payloadStart > payloadEnd) {
           return {

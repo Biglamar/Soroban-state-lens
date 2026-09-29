@@ -55,6 +55,20 @@ describe('Watchlist Slice', () => {
     expect(watchlist2[0].contractId).toBe('contract-2')
   })
 
+  it('keeps contract watchlists isolated by network', () => {
+    const { addToWatchlist, getWatchlistForContract } = useLensStore.getState()
+
+    addToWatchlist('contract-1', '/path/to/key')
+    useLensStore.getState().setNetworkConfig({ networkId: 'testnet' })
+    expect(getWatchlistForContract('contract-1')).toEqual([])
+
+    addToWatchlist('contract-1', '/path/to/key')
+    expect(getWatchlistForContract('contract-1')).toHaveLength(1)
+
+    useLensStore.getState().setNetworkConfig({ networkId: 'futurenet' })
+    expect(getWatchlistForContract('contract-1')).toHaveLength(1)
+  })
+
   it('should remove a key from watchlist', () => {
     const { addToWatchlist, removeFromWatchlist, getWatchlistForContract } =
       useLensStore.getState()
@@ -79,11 +93,14 @@ describe('Watchlist Slice', () => {
 
     const watchlist = getWatchlistForContract('contract-1')
     expect(watchlist).toEqual([])
-    expect(useLensStore.getState().watchlist['contract-1']).toBeUndefined()
+    expect(
+      useLensStore.getState().watchlist.futurenet?.['contract-1'],
+    ).toBeUndefined()
   })
 
   it('does nothing for unknown contracts or key paths', () => {
-    const { removeFromWatchlist, getWatchlistForContract } = useLensStore.getState()
+    const { removeFromWatchlist, getWatchlistForContract } =
+      useLensStore.getState()
 
     removeFromWatchlist('unknown-contract', '/path/to/key')
 
@@ -128,23 +145,25 @@ describe('Watchlist Slice', () => {
   it('should deduplicate hydrated watchlist buckets by key path', () => {
     useLensStore.setState({
       watchlist: {
-        'contract-1': [
-          {
-            contractId: 'contract-1',
-            keyPath: '/state/key1',
-            timestamp: 1,
-          },
-          {
-            contractId: 'contract-1',
-            keyPath: '/state/key1',
-            timestamp: 2,
-          },
-          {
-            contractId: 'contract-1',
-            keyPath: '/state/key2',
-            timestamp: 3,
-          },
-        ],
+        futurenet: {
+          'contract-1': [
+            {
+              contractId: 'contract-1',
+              keyPath: '/state/key1',
+              timestamp: 1,
+            },
+            {
+              contractId: 'contract-1',
+              keyPath: '/state/key1',
+              timestamp: 2,
+            },
+            {
+              contractId: 'contract-1',
+              keyPath: '/state/key2',
+              timestamp: 3,
+            },
+          ],
+        },
       },
     })
 
@@ -154,35 +173,37 @@ describe('Watchlist Slice', () => {
 
     expect(watchlist).toHaveLength(2)
     expect(watchlist[0]).toMatchObject({
-      keyPath: '/state/key1',
-      timestamp: 1,
-    })
-    expect(watchlist[1]).toMatchObject({
       keyPath: '/state/key2',
       timestamp: 3,
+    })
+    expect(watchlist[1]).toMatchObject({
+      keyPath: '/state/key1',
+      timestamp: 2,
     })
   })
 
   it('should reject items with mismatched contractId during hydration', () => {
     useLensStore.setState({
       watchlist: {
-        'contract-1': [
-          {
-            contractId: 'contract-1',
-            keyPath: '/state/key1',
-            timestamp: 1,
-          },
-          {
-            contractId: 'contract-2',
-            keyPath: '/state/key2',
-            timestamp: 2,
-          },
-          {
-            contractId: 'contract-1',
-            keyPath: '/state/key3',
-            timestamp: 3,
-          },
-        ],
+        futurenet: {
+          'contract-1': [
+            {
+              contractId: 'contract-1',
+              keyPath: '/state/key1',
+              timestamp: 1,
+            },
+            {
+              contractId: 'contract-2',
+              keyPath: '/state/key2',
+              timestamp: 2,
+            },
+            {
+              contractId: 'contract-1',
+              keyPath: '/state/key3',
+              timestamp: 3,
+            },
+          ],
+        },
       },
     })
 
@@ -192,8 +213,8 @@ describe('Watchlist Slice', () => {
 
     expect(watchlist).toHaveLength(2)
     expect(watchlist.map((item) => item.keyPath)).toEqual([
-      '/state/key1',
       '/state/key3',
+      '/state/key1',
     ])
     expect(watchlist.every((item) => item.contractId === 'contract-1')).toBe(
       true,
@@ -203,18 +224,20 @@ describe('Watchlist Slice', () => {
   it('should handle bucket with all mismatched contractIds', () => {
     useLensStore.setState({
       watchlist: {
-        'contract-1': [
-          {
-            contractId: 'contract-2',
-            keyPath: '/state/key1',
-            timestamp: 1,
-          },
-          {
-            contractId: 'contract-3',
-            keyPath: '/state/key2',
-            timestamp: 2,
-          },
-        ],
+        futurenet: {
+          'contract-1': [
+            {
+              contractId: 'contract-2',
+              keyPath: '/state/key1',
+              timestamp: 1,
+            },
+            {
+              contractId: 'contract-3',
+              keyPath: '/state/key2',
+              timestamp: 2,
+            },
+          ],
+        },
       },
     })
 
@@ -223,5 +246,26 @@ describe('Watchlist Slice', () => {
       .getWatchlistForContract('contract-1')
 
     expect(watchlist).toHaveLength(0)
+  })
+
+  it('returns newest pins first and breaks timestamp ties by key path', () => {
+    useLensStore.setState({
+      watchlist: {
+        futurenet: {
+          'contract-1': [
+            { contractId: 'contract-1', keyPath: '/z', timestamp: 2 },
+            { contractId: 'contract-1', keyPath: '/b', timestamp: 3 },
+            { contractId: 'contract-1', keyPath: '/a', timestamp: 3 },
+          ],
+        },
+      },
+    })
+
+    expect(
+      useLensStore
+        .getState()
+        .getWatchlistForContract('contract-1')
+        .map(({ keyPath }) => keyPath),
+    ).toEqual(['/a', '/b', '/z'])
   })
 })
