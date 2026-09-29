@@ -62,6 +62,55 @@ describe('InspectShell', () => {
     expect(screen.getByText(storedEntry.rawXdr)).toBeTruthy()
   })
 
+  it('shows the affected key path and expected/actual types for a schema mismatch', () => {
+    useLensStore.setState({
+      watchlist: {},
+      ledgerData: { [storedEntry.key]: storedEntry },
+      contractSpecMismatches: {
+        C123: [
+          {
+            keyPath: '/state/ledger',
+            expectedType: 'i128',
+            actualType: 'symbol',
+          },
+        ],
+      },
+    })
+
+    render(
+      <InspectShell
+        contractId="C123"
+        normalizedContractId="C123"
+        keyPath="/state/ledger"
+      />,
+    )
+
+    expect(screen.getByRole('alert')).toBeTruthy()
+    expect(screen.getByText('Schema mismatch')).toBeTruthy()
+    expect(screen.getByText('Key path: /state/ledger')).toBeTruthy()
+    expect(screen.getByText('i128')).toBeTruthy()
+    expect(screen.getByText('symbol')).toBeTruthy()
+  })
+
+  it('keeps the inspector clear when schema comparison finds no mismatch', () => {
+    useLensStore.setState({
+      watchlist: {},
+      ledgerData: { [storedEntry.key]: storedEntry },
+      contractSpecMismatches: { C123: [] },
+    })
+
+    render(
+      <InspectShell
+        contractId="C123"
+        normalizedContractId="C123"
+        keyPath="/state/ledger"
+      />,
+    )
+
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByText('Schema mismatch')).toBeNull()
+  })
+
   it('renders temporary metadata from the matching stored entry', () => {
     useLensStore.setState({
       watchlist: {},
@@ -149,7 +198,11 @@ describe('InspectShell', () => {
   it('shows feedback when the pinned key already exists', () => {
     useLensStore.setState({
       watchlist: {
-        C123: [{ contractId: 'C123', keyPath: '/state/ledger', timestamp: 1 }],
+        futurenet: {
+          C123: [
+            { contractId: 'C123', keyPath: '/state/ledger', timestamp: 1 },
+          ],
+        },
       },
       ledgerData: { [storedEntry.key]: storedEntry },
     })
