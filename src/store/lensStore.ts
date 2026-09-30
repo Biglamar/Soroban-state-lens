@@ -6,7 +6,10 @@ import { deepClone } from '../lib/deepClone'
 import { getLedgerEntries } from '../lib/network/getLedgerEntries'
 import { mapLedgerEntriesToStoreEntries } from '../lib/network/mapLedgerEntriesToStoreEntries'
 import { normalizeContractIdInput } from '../lib/validation/normalizeContractIdInput'
-import { isDecoderWorkerError } from '../types/decoder-worker'
+import {
+  isDecoderWorkerError,
+  limitDecoderErrorDetail,
+} from '../types/decoder-worker'
 import {
   createDecoderWorkerSafe,
   terminateDecoderWorkerSafe,
@@ -479,7 +482,8 @@ const createContractLoadSlice = (
 
     setContractLoadError: (message: string | null) =>
       set(() => ({
-        contractLoadError: message,
+        contractLoadError:
+          message === null ? null : limitDecoderErrorDetail(message),
         contractLoadAttemptCount: null,
       })),
 
@@ -649,8 +653,9 @@ const createContractLoadSlice = (
 
         set(() => ({
           contractLoadStatus: ContractLoadStatus.ERROR,
-          contractLoadError:
+          contractLoadError: limitDecoderErrorDetail(
             error instanceof Error ? error.message : 'Failed to load contract',
+          ),
           contractLoadAttemptCount: getAttemptCount(error),
         }))
       } finally {
