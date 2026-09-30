@@ -1,14 +1,15 @@
 import { buildJsonRpcRequest } from '../rpc/buildJsonRpcRequest'
 import { isJsonRpcErrorResponse } from '../rpc/isJsonRpcErrorResponse'
 import { isJsonRpcSuccessResponse } from '../rpc/isJsonRpcSuccessResponse'
+import { normalizeTimeoutMs } from '../rpc/normalizeTimeoutMs'
 import { toRpcRequestId } from '../rpc/toRpcRequestId'
 import { withRpcRetries } from '../rpc/withRpcRetries'
 import { deduplicateKeys } from './deduplicateKeys'
+import type { RpcRequestOptions } from './types'
 
-export interface GetLedgerEntriesParams {
+export interface GetLedgerEntriesParams extends RpcRequestOptions {
   rpcUrl: string
   keys: Array<string>
-  signal?: AbortSignal
 }
 
 export interface LedgerEntry {
@@ -27,6 +28,16 @@ export class AbortError extends Error {
   constructor(message = 'Request was aborted') {
     super(message)
     this.name = 'AbortError'
+  }
+}
+
+export class LedgerEntriesError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string | number,
+  ) {
+    super(message)
+    this.name = 'LedgerEntriesError'
   }
 }
 
@@ -67,6 +78,7 @@ export async function getLedgerEntries(
   params: GetLedgerEntriesParams,
 ): Promise<GetLedgerEntriesResult> {
   const { rpcUrl, keys: inputKeys, signal } = params
+  const timeoutMs = normalizeTimeoutMs(params.timeoutMs, 10000)
 
   // Deduplicate keys while preserving first-seen order
   const keys = deduplicateKeys(inputKeys)
@@ -85,6 +97,16 @@ export async function getLedgerEntries(
 
   const result = await withRpcRetries<LedgerEntriesOpResult>(async () => {
     const payload = buildJsonRpcRequest('getLedgerEntries', [keys], requestId)
+    const requestController = new AbortController()
+    const onCallerAbort = () => requestController.abort()
+
+    if (signal?.aborted) {
+      throw new AbortError()
+    }
+    signal?.addEventListener('abort', onCallerAbort, { once: true })
+    const timeoutId = setTimeout(() => {
+      requestController.abort()
+    }, timeoutMs)
 
     let response: Response
     try {
@@ -94,13 +116,18 @@ export async function getLedgerEntries(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
-        signal,
+        signal: requestController.signal,
       })
     } catch (error) {
-      if (
-        error instanceof Error &&
-        error.name === 'AbortError'
-      ) {
+      clearTimeout(timeoutId)
+      signal?.removeEventListener('abort', onCallerAbort)
+      if (signal?.aborted) {
+        throw new AbortError()
+      }
+      if (requestController.signal.aborted) {
+        return { message: 'Request timeout', code: 'TIMEOUT' }
+      }
+      if (error instanceof Error && error.name === 'AbortError') {
         throw new AbortError()
       }
       // Surfaced as a retryable network error to the retry classifier.
@@ -109,6 +136,8 @@ export async function getLedgerEntries(
         code: 'NETWORK_ERROR',
       }
     }
+    clearTimeout(timeoutId)
+    signal?.removeEventListener('abort', onCallerAbort)
 
     if (signal?.aborted) {
       throw new AbortError()
@@ -161,7 +190,7 @@ export async function getLedgerEntries(
   })
 
   if (isRpcError(result)) {
-    throw new Error(result.message)
+    throw new LedgerEntriesError(result.message, result.code)
   }
 
   return result

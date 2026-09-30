@@ -117,8 +117,12 @@ export enum ContractLoadStatus {
 export interface ContractLoadSlice {
   contractLoadStatus: ContractLoadStatus
   contractLoadError: string | null
+  contractLoadErrorCode: string | number | null
   setContractLoadStatus: (status: ContractLoadStatus) => void
-  setContractLoadError: (message: string | null) => void
+  setContractLoadError: (
+    message: string | null,
+    code?: string | number | null,
+  ) => void
   resetContractLoadState: () => void
   loadContract: (contractId: string, keys: Array<string>) => Promise<void>
 }

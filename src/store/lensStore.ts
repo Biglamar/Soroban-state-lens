@@ -259,17 +259,22 @@ const createContractLoadSlice = (
   return {
     contractLoadStatus: ContractLoadStatus.IDLE,
     contractLoadError: null,
+    contractLoadErrorCode: null,
 
     setContractLoadStatus: (status: ContractLoadStatus) =>
       set(() => ({ contractLoadStatus: status })),
 
-    setContractLoadError: (message: string | null) =>
-      set(() => ({ contractLoadError: message })),
+    setContractLoadError: (message: string | null, code = null) =>
+      set(() => ({
+        contractLoadError: message,
+        contractLoadErrorCode: message === null ? null : code,
+      })),
 
     resetContractLoadState: () =>
       set(() => ({
         contractLoadStatus: ContractLoadStatus.IDLE,
         contractLoadError: null,
+        contractLoadErrorCode: null,
       })),
 
     loadContract: async (contractId: string, keys: Array<string>) => {
@@ -288,6 +293,7 @@ const createContractLoadSlice = (
         activeContractId: contractId,
         contractLoadStatus: ContractLoadStatus.LOADING,
         contractLoadError: null,
+        contractLoadErrorCode: null,
         ledgerData:
           state.activeContractId === contractId ? state.ledgerData : {},
       }))
@@ -328,6 +334,7 @@ const createContractLoadSlice = (
               ? ContractLoadStatus.EMPTY
               : ContractLoadStatus.SUCCESS,
           contractLoadError: null,
+          contractLoadErrorCode: null,
         }))
       } catch (error) {
         if (currentRequestId !== requestId || signal.aborted) {
@@ -338,6 +345,12 @@ const createContractLoadSlice = (
           contractLoadStatus: ContractLoadStatus.ERROR,
           contractLoadError:
             error instanceof Error ? error.message : 'Failed to load contract',
+          contractLoadErrorCode:
+            error instanceof Error &&
+            'code' in error &&
+            (typeof error.code === 'string' || typeof error.code === 'number')
+              ? error.code
+              : null,
         }))
       } finally {
         if (activeController === controller) {
@@ -495,6 +508,7 @@ export const resetStore = () => {
     selectedKeyPath: null,
     contractLoadStatus: ContractLoadStatus.IDLE,
     contractLoadError: null,
+    contractLoadErrorCode: null,
     preferences: DEFAULT_PREFERENCES,
   })
 }
@@ -534,8 +548,10 @@ export const lensActions = {
   clearSelectedKeyPath: () => useLensStore.getState().clearSelectedKeyPath(),
   setContractLoadStatus: (status: ContractLoadStatus) =>
     useLensStore.getState().setContractLoadStatus(status),
-  setContractLoadError: (message: string | null) =>
-    useLensStore.getState().setContractLoadError(message),
+  setContractLoadError: (
+    message: string | null,
+    code?: string | number | null,
+  ) => useLensStore.getState().setContractLoadError(message, code),
   resetContractLoadState: () =>
     useLensStore.getState().resetContractLoadState(),
   loadContract: (contractId: string, keys: Array<string>) =>

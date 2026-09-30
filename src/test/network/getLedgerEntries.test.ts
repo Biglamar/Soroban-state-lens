@@ -143,7 +143,11 @@ describe('getLedgerEntries', () => {
           rpcUrl: mockRpcUrl,
           keys: mockKeys,
         }),
-      ).rejects.toThrow('HTTP error! status: 500')
+      ).rejects.toMatchObject({
+        name: 'LedgerEntriesError',
+        message: 'HTTP error! status: 500',
+        code: 500,
+      })
     })
 
     it('throws error on RPC error response', async () => {
@@ -166,7 +170,11 @@ describe('getLedgerEntries', () => {
           rpcUrl: mockRpcUrl,
           keys: mockKeys,
         }),
-      ).rejects.toThrow('RPC Error (-32600): Invalid Request')
+      ).rejects.toMatchObject({
+        name: 'LedgerEntriesError',
+        message: 'RPC Error (-32600): Invalid Request',
+        code: -32600,
+      })
     })
 
     it('throws error on invalid JSON-RPC format', async () => {
@@ -238,6 +246,53 @@ describe('getLedgerEntries', () => {
           signal: controller.signal,
         }),
       ).rejects.toThrow(AbortError)
+    })
+  })
+
+  describe('timeout options', () => {
+    it('uses the default timeout when none is provided', async () => {
+      const timeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          jsonrpc: '2.0',
+          id: 1,
+          result: { entries: [], latestLedger: 100 },
+        }),
+      } as Response)
+
+      await getLedgerEntries({ rpcUrl: mockRpcUrl, keys: mockKeys })
+
+      expect(timeoutSpy).toHaveBeenCalledWith(expect.any(Function), 10000)
+      timeoutSpy.mockRestore()
+    })
+
+    it('uses a custom timeout and aborts the request when it expires', async () => {
+      vi.useFakeTimers()
+      vi.mocked(fetch).mockImplementation(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              reject(new DOMException('Request timed out', 'AbortError'))
+            })
+          }),
+      )
+
+      const request = getLedgerEntries({
+        rpcUrl: mockRpcUrl,
+        keys: mockKeys,
+        timeoutMs: 25,
+      })
+      const rejection = expect(request).rejects.toMatchObject({
+        name: 'LedgerEntriesError',
+        message: 'Request timeout',
+        code: 'TIMEOUT',
+      })
+      await vi.runAllTimersAsync()
+
+      await rejection
+      expect(fetch).toHaveBeenCalledTimes(3)
+      vi.useRealTimers()
     })
   })
 
@@ -323,6 +378,9 @@ describe('getLedgerEntries', () => {
 
       // Verify the request only included deduplicated keys in order
       const callArgs = vi.mocked(fetch).mock.calls[0]
+      if (callArgs[1] === undefined) {
+        throw new Error('Expected fetch request options')
+      }
       const requestBody = JSON.parse(callArgs[1].body as string)
       expect(requestBody.params[0]).toEqual(['key1', 'key2', 'key3'])
 
@@ -353,6 +411,9 @@ describe('getLedgerEntries', () => {
       })
 
       const callArgs = vi.mocked(fetch).mock.calls[0]
+      if (callArgs[1] === undefined) {
+        throw new Error('Expected fetch request options')
+      }
       const requestBody = JSON.parse(callArgs[1].body as string)
       expect(requestBody.params[0]).toEqual(['key1'])
     })

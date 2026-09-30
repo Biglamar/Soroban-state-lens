@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import * as rpcClient from '../../lib/network/rpcClient'
 import { getContractWasm } from '../../lib/network/getContractWasm'
 import type { GetContractWasmParams } from '../../lib/network/getContractWasm'
 
@@ -55,5 +56,30 @@ describe('getContractWasm', () => {
       success: false,
       error: 'Network error',
     })
+  })
+
+  it('forwards shared timeout and caller-signal options', async () => {
+    const signal = new AbortController().signal
+    const spy = vi.spyOn(rpcClient, 'callRpc').mockResolvedValue({
+      jsonrpc: '2.0',
+      id: 1,
+      result: { code: 'AQIDBA==' },
+    })
+
+    await getContractWasm({
+      rpcUrl: mockRpcUrl,
+      contractId: mockContractId,
+      timeoutMs: 2500,
+      signal,
+    })
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: mockRpcUrl,
+        timeout: 2500,
+        signal,
+      }),
+      expect.anything(),
+    )
   })
 })

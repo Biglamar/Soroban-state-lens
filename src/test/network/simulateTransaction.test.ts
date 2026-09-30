@@ -50,6 +50,40 @@ describe('simulateTransactionAdapter', () => {
     expect(result.success).toBe(true)
     expect(result.results).toEqual([])
   })
+
+  it('normalizes simulation footprint keys deterministically', () => {
+    const result = simulateTransactionAdapter({
+      footprint: {
+        readOnly: [' z-key ', 'a-key', 'z-key', '  '],
+        readWrite: [' write ', '', 'write'],
+      },
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      footprint: {
+        readOnly: ['a-key', 'z-key'],
+        readWrite: ['write'],
+      },
+    })
+  })
+
+  it.each([-1, 1.5, NaN, Infinity, -Infinity])(
+    'rejects invalid latest ledger metadata: %s',
+    (latestLedger) => {
+      expect(simulateTransactionAdapter({ latestLedger })).toEqual({
+        success: false,
+        error: 'Invalid latest ledger value',
+      })
+    },
+  )
+
+  it('accepts a nonnegative integer latest ledger', () => {
+    expect(simulateTransactionAdapter({ latestLedger: 100 })).toMatchObject({
+      success: true,
+      latestLedger: 100,
+    })
+  })
 })
 
 describe('extractFootprintKeys', () => {

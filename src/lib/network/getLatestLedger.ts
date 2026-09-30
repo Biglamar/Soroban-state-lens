@@ -1,8 +1,9 @@
 import { buildJsonRpcRequest } from '../rpc/buildJsonRpcRequest'
 import { isJsonRpcSuccessResponse } from '../rpc/isJsonRpcSuccessResponse'
+import { normalizeTimeoutMs } from '../rpc/normalizeTimeoutMs'
 import { toRpcRequestId } from '../rpc/toRpcRequestId'
 import { callRpc } from './rpcClient'
-import type { LatestLedgerResult, RpcError } from './types'
+import type { LatestLedgerResult, RpcError, RpcRequestOptions } from './types'
 
 export interface GetLatestLedgerConnectionResult {
   success: boolean
@@ -46,13 +47,24 @@ function parseLatestLedgerResult(value: unknown): LatestLedgerResult | null {
 
 export async function getLatestLedgerConnectionCheck(
   url: string,
-  timeoutMs?: number,
+  timeoutOrOptions?: number | RpcRequestOptions,
+  callerSignal?: AbortSignal,
 ): Promise<GetLatestLedgerConnectionResult> {
+  const timeoutMs =
+    typeof timeoutOrOptions === 'number'
+      ? timeoutOrOptions
+      : timeoutOrOptions?.timeoutMs
+  const signal =
+    typeof timeoutOrOptions === 'object'
+      ? timeoutOrOptions.signal
+      : callerSignal
+
   try {
     const response = await callRpc(
       {
         url,
-        timeout: timeoutMs ?? 5000,
+        timeout: normalizeTimeoutMs(timeoutMs, 5000),
+        signal,
       },
       buildJsonRpcRequest('getLatestLedger', {}, toRpcRequestId()),
     )

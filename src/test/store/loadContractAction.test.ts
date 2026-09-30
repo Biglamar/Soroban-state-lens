@@ -26,9 +26,8 @@ describe('loadContract action', () => {
   })
 
   it('loads, decodes, and stores entries on success', async () => {
-    const { resetStore, getStoreState, useLensStore } = await import(
-      '../../store/lensStore'
-    )
+    const { resetStore, getStoreState, useLensStore } =
+      await import('../../store/lensStore')
     resetStore()
 
     mockGetLedgerEntries.mockResolvedValue({
@@ -60,9 +59,8 @@ describe('loadContract action', () => {
   })
 
   it('sets EMPTY when the load succeeds with no entries', async () => {
-    const { resetStore, getStoreState, useLensStore } = await import(
-      '../../store/lensStore'
-    )
+    const { resetStore, getStoreState, useLensStore } =
+      await import('../../store/lensStore')
     resetStore()
 
     mockGetLedgerEntries.mockResolvedValue({
@@ -85,9 +83,8 @@ describe('loadContract action', () => {
   })
 
   it('sets ERROR when load fails', async () => {
-    const { resetStore, getStoreState, useLensStore } = await import(
-      '../../store/lensStore'
-    )
+    const { resetStore, getStoreState, useLensStore } =
+      await import('../../store/lensStore')
     resetStore()
 
     mockGetLedgerEntries.mockRejectedValue(new Error('network failure'))
@@ -97,28 +94,48 @@ describe('loadContract action', () => {
     const state = getStoreState()
     expect(state.contractLoadStatus).toBe(ContractLoadStatus.ERROR)
     expect(state.contractLoadError).toBe('network failure')
+    expect(state.contractLoadErrorCode).toBeNull()
+  })
+
+  it('preserves an RPC error code in contract load state', async () => {
+    const { resetStore, getStoreState, useLensStore } =
+      await import('../../store/lensStore')
+    resetStore()
+
+    const error = Object.assign(new Error('RPC request failed'), {
+      code: -32000,
+    })
+    mockGetLedgerEntries.mockRejectedValue(error)
+
+    await useLensStore.getState().loadContract('C_RPC_FAIL', ['rpc-key'])
+
+    const state = getStoreState()
+    expect(state.contractLoadStatus).toBe(ContractLoadStatus.ERROR)
+    expect(state.contractLoadError).toBe('RPC request failed')
+    expect(state.contractLoadErrorCode).toBe(-32000)
   })
 
   it('ignores stale in-flight results and keeps newest response', async () => {
-    const { resetStore, getStoreState, useLensStore } = await import(
-      '../../store/lensStore'
-    )
+    const { resetStore, getStoreState, useLensStore } =
+      await import('../../store/lensStore')
     resetStore()
 
     let resolveFirst:
-      | ((
-          value: {
-            entries: Array<{
-              key: string
-              xdr: string
-              lastModifiedLedgerSeq?: number
-            }>
-            latestLedger: number
-          },
-        ) => void)
+      | ((value: {
+          entries: Array<{
+            key: string
+            xdr: string
+            lastModifiedLedgerSeq?: number
+          }>
+          latestLedger: number
+        }) => void)
       | undefined
     const firstPromise = new Promise<{
-      entries: Array<{ key: string; xdr: string; lastModifiedLedgerSeq?: number }>
+      entries: Array<{
+        key: string
+        xdr: string
+        lastModifiedLedgerSeq?: number
+      }>
       latestLedger: number
     }>((resolve) => {
       resolveFirst = resolve
@@ -127,9 +144,7 @@ describe('loadContract action', () => {
     mockGetLedgerEntries
       .mockReturnValueOnce(firstPromise)
       .mockResolvedValueOnce({
-        entries: [
-          { key: 'new-key', xdr: 'new-xdr', lastModifiedLedgerSeq: 2 },
-        ],
+        entries: [{ key: 'new-key', xdr: 'new-xdr', lastModifiedLedgerSeq: 2 }],
         latestLedger: 2,
       })
 

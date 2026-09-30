@@ -62,10 +62,15 @@ function ContractExplorer() {
   const setContractLoadStatus = useLensStore(
     (state) => state.setContractLoadStatus,
   )
-  const setContractLoadError = useLensStore((state) => state.setContractLoadError)
+  const setContractLoadError = useLensStore(
+    (state) => state.setContractLoadError,
+  )
   const loadContract = useLensStore((state) => state.loadContract)
   const contractLoadStatus = useLensStore((state) => state.contractLoadStatus)
   const contractLoadError = useLensStore((state) => state.contractLoadError)
+  const contractLoadErrorCode = useLensStore(
+    (state) => state.contractLoadErrorCode,
+  )
   const expandedNodes = useLensStore((state) => state.expandedNodes)
   const toggleExpanded = useLensStore((state) => state.toggleExpanded)
   const expandAll = useLensStore((state) => state.expandAll)
@@ -89,7 +94,7 @@ function ContractExplorer() {
 
   const handleCaptureSnapshot = () => {
     if (ledgerEntries.length === 0) return
-    const entriesDict: Record<string, typeof ledgerEntries[0]> = {}
+    const entriesDict: Record<string, (typeof ledgerEntries)[0]> = {}
     ledgerEntries.forEach((entry) => {
       entriesDict[entry.key] = entry
     })
@@ -263,6 +268,11 @@ function ContractExplorer() {
             <p className="text-text-muted text-sm">
               {contractLoadError || 'An unknown error occurred while loading.'}
             </p>
+            {contractLoadErrorCode !== null && (
+              <p className="text-text-muted text-xs">
+                RPC error code: {contractLoadErrorCode}
+              </p>
+            )}
             <div>
               <Button variant="secondary" size="sm" onClick={handleRetry}>
                 Retry
