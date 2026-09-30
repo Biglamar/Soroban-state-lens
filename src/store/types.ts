@@ -97,16 +97,6 @@ export interface ContractSnapshot {
   label?: string
 }
 
-// Active contract snapshot summary for history route rendering
-export interface ActiveContractSnapshotSummary {
-  id: string
-  contractId: string
-  label?: string
-  timestamp: number
-  ledgerSequence: number
-  entryCount: number
-}
-
 export const DEFAULT_SNAPSHOT_RETENTION_LIMIT = 25
 
 // Snapshot slice
@@ -122,7 +112,6 @@ export interface SnapshotSlice {
   getSnapshots: (contractId: string) => Array<ContractSnapshot>
   removeSnapshot: (contractId: string, snapshotId: string) => void
   clearSnapshots: (contractId: string) => void
-  getActiveContractSnapshotSummaries: () => Array<ActiveContractSnapshotSummary>
 }
 
 // Contract slice

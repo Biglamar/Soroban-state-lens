@@ -1,8 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { useSnapshots } from '../../../store/lensStore'
 import { validateContractRouteParam } from './-validateContractRouteParam'
-import { useLensStore } from '~/store/useLensStore'
-import { selectSnapshotsForContract } from '~/store/selectors'
-import type { ContractSnapshot } from '~/store/types'
+import type { ContractSnapshot } from '../../../store/types'
 
 export const Route = createFileRoute(
   ('/contracts/$contractId/history' as unknown) as any,
@@ -30,13 +29,13 @@ function formatLabel(snapshot: ContractSnapshot): string {
 }
 
 function countSnapshotEntries(snapshot: ContractSnapshot): number {
-  return Object.keys(snapshot.ledgerData ?? {}).length
+  return Object.keys(snapshot.ledgerData).length
 }
 
 export function ContractHistoryRoute() {
   const { contractId } = Route.useParams()
   const id = contractId
-  const snapshots = useLensStore(selectSnapshotsForContract(id))
+  const snapshots = useSnapshots(id)
 
   return (
     <div className="flex flex-col h-full p-6 text-white font-mono">
