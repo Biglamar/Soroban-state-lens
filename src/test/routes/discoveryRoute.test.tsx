@@ -21,7 +21,7 @@ interface JsonRpcRequest {
   method: string
 }
 
-function getRpcRequests(method: string) {
+function getRpcPayloads(method: string) {
   return vi.mocked(fetch).mock.calls.filter(([, init]) => {
     const request = JSON.parse(String(init?.body)) as JsonRpcRequest
     return request.method === method
@@ -90,7 +90,7 @@ describe('Discovery route', () => {
       screen.getByRole('button', { name: 'Simulate transaction' }),
     )
 
-    expect(getRpcRequests('simulateTransaction')).toHaveLength(0)
+    expect(getRpcPayloads('simulateTransaction')).toHaveLength(0)
     expect(
       screen.getByLabelText('Function name').getAttribute('aria-invalid'),
     ).toBe('true')
@@ -106,7 +106,7 @@ describe('Discovery route', () => {
     )
 
     expect(await screen.findByText('Transaction XDR is required.')).toBeTruthy()
-    expect(getRpcRequests('simulateTransaction')).toHaveLength(0)
+    expect(getRpcPayloads('simulateTransaction')).toHaveLength(0)
   })
 
   it('simulates the transaction and displays normalized discovered keys', async () => {
@@ -181,6 +181,79 @@ describe('Discovery route', () => {
     ).toBeNull()
   })
 
+  it('maps common authorization failures to actionable discovery messages', async () => {
+    mockRpcResponse((request) =>
+      request.method === 'getLatestLedger'
+        ? { result: { sequence: 123 } }
+        : {
+            error: {
+              code: -32001,
+              message: 'Unauthorized: invalid auth token',
+            },
+          },
+    )
+    renderDiscoveryRoute()
+    await fillValidForm()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Simulate transaction' }),
+    )
+
+    expect(
+      await screen.findByText(
+        'Authorization failed: check your RPC credentials and try again.',
+      ),
+    ).toBeTruthy()
+    expect(screen.queryByText('RPC Error (-32001)')).toBeNull()
+  })
+
+  it('maps expired authorization to an actionable discovery message', async () => {
+    mockRpcResponse((request) =>
+      request.method === 'getLatestLedger'
+        ? { result: { sequence: 123 } }
+        : {
+            error: {
+              code: -32002,
+              message: 'Auth token has expired',
+            },
+          },
+    )
+    renderDiscoveryRoute()
+    await fillValidForm()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Simulate transaction' }),
+    )
+
+    expect(
+      await screen.findByText(
+        'Authorization expired: refresh your RPC credentials and try again.',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('maps missing authorization to an actionable discovery message', async () => {
+    mockRpcResponse((request) =>
+      request.method === 'getLatestLedger'
+        ? { result: { sequence: 123 } }
+        : {
+            error: {
+              code: -32003,
+              message: 'Missing authorization header',
+            },
+          },
+    )
+    renderDiscoveryRoute()
+    await fillValidForm()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Simulate transaction' }),
+    )
+
+    expect(
+      await screen.findByText(
+        'Authorization required: add your RPC credentials and try again.',
+      ),
+    ).toBeTruthy()
+  })
+
   it('aborts a pending simulation when the route unmounts', async () => {
     let resolveResponse: (response: Response) => void = () => undefined
     vi.mocked(fetch).mockImplementation((_input, init) => {
@@ -206,9 +279,9 @@ describe('Discovery route', () => {
       screen.getByRole('button', { name: 'Simulate transaction' }),
     )
     await waitFor(() =>
-      expect(getRpcRequests('simulateTransaction')).toHaveLength(1),
+      expect(getRpcPayloads('simulateTransaction')).toHaveLength(1),
     )
-    const [, init] = getRpcRequests('simulateTransaction')[0]
+    const [, init] = getRpcPayloads('simulateTransaction')[0]
     const signal = init?.signal as AbortSignal
 
     view.unmount()

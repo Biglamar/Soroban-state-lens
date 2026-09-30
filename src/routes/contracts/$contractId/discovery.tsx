@@ -138,7 +138,7 @@ export function DiscoveryStateView({
             Discovery failed
           </Heading>
           <p className="text-text-muted text-sm">
-            {state.error || 'An unknown error occurred while discovering keys.'}
+            {state.error ?? 'An unknown error occurred while discovering keys.'}
           </p>
           {onRetry && (
             <div>
