@@ -12,10 +12,12 @@ export interface FlatTreeRow {
   hasChildren: boolean
   childCount: number
   node: Node
+  expired?: boolean
 }
 
 export interface FlattenTreeRoot {
   id: string
   label: string
   node: Node
+  expired?: boolean
 }

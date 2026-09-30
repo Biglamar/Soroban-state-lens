@@ -274,9 +274,9 @@ const createSnapshotSlice = (
       return {
         snapshots: {
           ...state.snapshots,
-          [normalizedContractId]: (state.snapshots[normalizedContractId] ?? []).filter(
-            (s) => s.id !== snapshotId,
-          ),
+          [normalizedContractId]: (
+            state.snapshots[normalizedContractId] ?? []
+          ).filter((s) => s.id !== snapshotId),
         },
       }
     }),
@@ -345,7 +345,7 @@ const createContractLoadSlice = (
       }))
 
       try {
-        const { entries } = await getLedgerEntries({
+        const { entries, latestLedger } = await getLedgerEntries({
           rpcUrl: get().networkConfig.rpcUrl,
           keys,
           signal,
@@ -386,6 +386,7 @@ const createContractLoadSlice = (
           contractId,
           entries,
           decodedValuesByKey,
+          latestLedger,
         })
 
         set(() => ({
@@ -553,7 +554,9 @@ export const useLensStore = create<LensStore>()(
         }
 
         return {
-          networkConfig: serializeNetworkConfigForStorage(DEFAULT_NETWORK_CONFIG),
+          networkConfig: serializeNetworkConfigForStorage(
+            DEFAULT_NETWORK_CONFIG,
+          ),
           preferences: DEFAULT_PREFERENCES,
           watchlist: {},
         }

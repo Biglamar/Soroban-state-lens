@@ -1,7 +1,76 @@
 import { describe, expect, it } from 'vitest'
+import { xdr } from '@stellar/stellar-sdk'
 import { mapLedgerEntriesToStoreEntries } from '../../lib/network/mapLedgerEntriesToStoreEntries'
 
+function makeContractDataKey(
+  durability: ReturnType<typeof xdr.ContractDataDurability.temporary>,
+): string {
+  return xdr.LedgerKey.contractData(
+    new xdr.LedgerKeyContractData({
+      contract: xdr.ScAddress.scAddressTypeContract(Buffer.alloc(32)),
+      key: xdr.ScVal.scvSymbol('item'),
+      durability,
+    }),
+  ).toXDR('base64')
+}
+
 describe('mapLedgerEntriesToStoreEntries', () => {
+  it('marks expired entries without dropping their decoded value', () => {
+    const decodedValue = { kind: 'primitive', scType: 'string', value: 'kept' }
+    const temporaryKey = makeContractDataKey(
+      xdr.ContractDataDurability.temporary(),
+    )
+    const result = mapLedgerEntriesToStoreEntries({
+      contractId: 'CONTRACT_EXPIRED',
+      entries: [
+        {
+          key: temporaryKey,
+          xdr: 'xdr-temporary',
+          liveUntilLedgerSeq: 99,
+        },
+      ],
+      decodedValuesByKey: { [temporaryKey]: decodedValue },
+      latestLedger: 100,
+    })
+
+    expect(result[0]?.expired).toBe(true)
+    expect(result[0]?.durability).toBe('Temporary')
+    expect(result[0]?.value).toBe(decodedValue)
+  })
+
+  it('does not mark entries expired at or before their live-until ledger', () => {
+    const result = mapLedgerEntriesToStoreEntries({
+      contractId: 'CONTRACT_LIVE',
+      entries: [
+        {
+          key: makeContractDataKey(xdr.ContractDataDurability.temporary()),
+          xdr: 'xdr-live',
+          liveUntilLedgerSeq: 100,
+        },
+      ],
+      latestLedger: 100,
+    })
+
+    expect(result[0]?.expired).toBeUndefined()
+  })
+
+  it('does not mark persistent entries expired even after their live-until ledger', () => {
+    const result = mapLedgerEntriesToStoreEntries({
+      contractId: 'CONTRACT_PERSISTENT',
+      entries: [
+        {
+          key: makeContractDataKey(xdr.ContractDataDurability.persistent()),
+          xdr: 'xdr-persistent',
+          liveUntilLedgerSeq: 99,
+        },
+      ],
+      latestLedger: 100,
+    })
+
+    expect(result[0]?.durability).toBe('Persistent')
+    expect(result[0]?.expired).toBeUndefined()
+  })
+
   it('maps representative entries into stable store records', () => {
     const result = mapLedgerEntriesToStoreEntries({
       contractId: 'CONTRACT_1',

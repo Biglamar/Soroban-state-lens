@@ -16,10 +16,7 @@ export interface SimulateTransactionParams {
 }
 
 export interface SimulateTransactionResponse {
-  results?: Array<{
-    auth?: Array<unknown>
-    xdr?: string
-  }>
+  results?: unknown
   footprint?: {
     readOnly?: Array<string>
     readWrite?: Array<string>
@@ -50,6 +47,36 @@ function sanitizeFootprintSection(value: unknown): Array<string> {
   return value.every((item) => typeof item === 'string') ? value : []
 }
 
+function sanitizeSimulationResults(
+  value: unknown,
+): NonNullable<SimulateTransactionResult['results']> {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.flatMap((item) => {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      return []
+    }
+
+    const record = item as Record<string, unknown>
+    if (
+      (!('auth' in record) && !('xdr' in record)) ||
+      ('auth' in record && !Array.isArray(record.auth)) ||
+      ('xdr' in record && typeof record.xdr !== 'string')
+    ) {
+      return []
+    }
+
+    return [
+      {
+        ...('auth' in record ? { auth: record.auth as Array<unknown> } : {}),
+        ...('xdr' in record ? { xdr: record.xdr as string } : {}),
+      },
+    ]
+  })
+}
+
 /**
  * Adapts a raw simulateTransaction response into a typed result shape
  */
@@ -76,7 +103,7 @@ export function simulateTransactionAdapter(
   return {
     success: true,
     latestLedger,
-    results: response.results ?? [],
+    results: sanitizeSimulationResults(response.results),
     footprint: {
       readOnly: sanitizeFootprintSection(response.footprint?.readOnly),
       readWrite: sanitizeFootprintSection(response.footprint?.readWrite),

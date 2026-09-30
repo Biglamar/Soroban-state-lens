@@ -43,6 +43,20 @@ describe('TreeRow', () => {
     expect(screen.getByText('string')).toBeTruthy()
   })
 
+  it('marks expired rows while preserving the value preview', () => {
+    render(
+      <TreeRow
+        row={makeRow({ expired: true })}
+        rowHeight={40}
+        isExpanded={false}
+        isSelected={false}
+      />,
+    )
+
+    expect(screen.getByText('Expired')).toBeTruthy()
+    expect(screen.getByText('hello')).toBeTruthy()
+  })
+
   it('renders expander only for parent rows', () => {
     const row = makeRow({
       hasChildren: true,
@@ -59,7 +73,9 @@ describe('TreeRow', () => {
       />,
     )
 
-    expect(screen.getByRole('button', { name: 'Toggle entry[0].value' })).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Toggle entry[0].value' }),
+    ).toBeTruthy()
     expect(screen.getByText('vec')).toBeTruthy()
     expect(screen.getByText('0 items')).toBeTruthy()
   })
@@ -86,12 +102,7 @@ describe('TreeRow', () => {
     expect(expandableRow.getAttribute('aria-expanded')).toBe('false')
 
     rerender(
-      <TreeRow
-        row={row}
-        rowHeight={40}
-        isExpanded={true}
-        isSelected={false}
-      />,
+      <TreeRow row={row} rowHeight={40} isExpanded={true} isSelected={false} />,
     )
     expect(expandableRow.getAttribute('aria-expanded')).toBe('true')
 

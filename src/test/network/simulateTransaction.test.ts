@@ -59,6 +59,34 @@ describe('simulateTransactionAdapter', () => {
     expect(result.results).toEqual([])
   })
 
+  it('filters malformed result records while keeping valid siblings', () => {
+    const result = simulateTransactionAdapter({
+      results: [
+        { xdr: 'valid-xdr', auth: [] },
+        null,
+        { xdr: 42 },
+        { auth: 'invalid-auth' },
+        ['not', 'a', 'record'],
+        { unexpected: true },
+        { auth: [{ credentials: 'valid' }] },
+      ] as unknown as Array<{ auth?: Array<unknown>; xdr?: string }>,
+    })
+
+    expect(result.results).toEqual([
+      { xdr: 'valid-xdr', auth: [] },
+      { auth: [{ credentials: 'valid' }] },
+    ])
+  })
+
+  it('treats a non-array result collection as empty', () => {
+    const result = simulateTransactionAdapter({
+      results: { xdr: 'not-an-array' },
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.results).toEqual([])
+  })
+
   it.each([
     { latestLedger: 1.5, description: 'fractional' },
     { latestLedger: -1, description: 'negative' },

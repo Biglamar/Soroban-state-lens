@@ -1,3 +1,4 @@
+import { xdr } from '@stellar/stellar-sdk'
 import { makeLedgerEntryKey } from '../storage/makeLedgerEntryKey'
 import type { LedgerEntry as RpcLedgerEntry } from './getLedgerEntries'
 import type { LedgerEntry as StoreLedgerEntry } from '../../store/types'
@@ -6,6 +7,7 @@ interface MapLedgerEntriesParams {
   contractId: string
   entries: Array<RpcLedgerEntry>
   decodedValuesByKey?: Record<string, unknown>
+  latestLedger?: number
 }
 
 function inferLedgerEntryType(key: string): StoreLedgerEntry['type'] {
@@ -29,25 +31,51 @@ function inferLedgerEntryType(key: string): StoreLedgerEntry['type'] {
   return 'Other'
 }
 
+function inferDurability(
+  key: string,
+): StoreLedgerEntry['durability'] | undefined {
+  try {
+    const ledgerKey = xdr.LedgerKey.fromXDR(key, 'base64')
+    if (ledgerKey.switch().name !== 'contractData') {
+      return undefined
+    }
+
+    const durability = ledgerKey.contractData().durability().name
+    if (durability === 'temporary') return 'Temporary'
+    if (durability === 'persistent') return 'Persistent'
+  } catch {
+    return undefined
+  }
+
+  return undefined
+}
+
 /**
  * Maps raw RPC ledger-entry payloads into the canonical store entry shape.
  */
 export function mapLedgerEntriesToStoreEntries(
   params: MapLedgerEntriesParams,
 ): Array<StoreLedgerEntry> {
-  const { contractId, entries, decodedValuesByKey = {} } = params
+  const { contractId, entries, decodedValuesByKey = {}, latestLedger } = params
   return entries.map((entry) => {
     const type = inferLedgerEntryType(entry.key)
+    const durability = inferDurability(entry.key)
     const last = entry.lastModifiedLedgerSeq
     const live = entry.liveUntilLedgerSeq
 
     const lastModifiedLedger =
-      typeof last === 'number' && Number.isFinite(last) && last >= 0 && Number.isInteger(last)
+      typeof last === 'number' &&
+      Number.isFinite(last) &&
+      last >= 0 &&
+      Number.isInteger(last)
         ? last
         : 0
 
     const expirationLedger =
-      typeof live === 'number' && Number.isFinite(live) && live >= 0 && Number.isInteger(live)
+      typeof live === 'number' &&
+      Number.isFinite(live) &&
+      live >= 0 &&
+      Number.isInteger(live)
         ? live
         : undefined
 
@@ -59,8 +87,15 @@ export function mapLedgerEntriesToStoreEntries(
         decodedValuesByKey[entry.key] !== undefined
           ? decodedValuesByKey[entry.key]
           : entry.xdr,
+      ...(durability ? { durability } : {}),
       lastModifiedLedger,
       expirationLedger,
+      ...(durability === 'Temporary' &&
+      expirationLedger !== undefined &&
+      latestLedger !== undefined &&
+      latestLedger > expirationLedger
+        ? { expired: true }
+        : {}),
       rawXdr: entry.xdr,
     }
   })

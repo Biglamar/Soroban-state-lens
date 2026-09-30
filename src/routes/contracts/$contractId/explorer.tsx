@@ -109,7 +109,7 @@ function ContractExplorer() {
 
   const handleCaptureSnapshot = () => {
     if (ledgerEntries.length === 0) return
-    const entriesDict: Record<string, typeof ledgerEntries[0]> = {}
+    const entriesDict: Record<string, (typeof ledgerEntries)[0]> = {}
     ledgerEntries.forEach((entry) => {
       entriesDict[entry.key] = entry
     })
@@ -134,6 +134,7 @@ function ContractExplorer() {
             id: entry.key,
             label: entry.key,
             node: entry.value,
+            expired: entry.expired,
           },
         ]
       }),
@@ -186,7 +187,7 @@ function ContractExplorer() {
 
   // Focus management for error state retry control
   const errorRetryButtonRef = useRef<HTMLButtonElement>(null)
-  
+
   useEffect(() => {
     // Move focus to retry button when error occurs
     if (contractLoadStatus === ContractLoadStatus.ERROR) {
@@ -243,9 +244,7 @@ function ContractExplorer() {
         </div>
       </header>
 
-      {contractLoadStatus === ContractLoadStatus.LOADING && (
-        <LoadingSkeleton />
-      )}
+      {contractLoadStatus === ContractLoadStatus.LOADING && <LoadingSkeleton />}
 
       {contractLoadStatus === ContractLoadStatus.EMPTY && (
         <Card>

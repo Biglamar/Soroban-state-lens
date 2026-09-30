@@ -1,5 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { xdr } from '@stellar/stellar-sdk'
 import { ContractLoadStatus } from '../../store/types'
+
+function makeTemporaryLedgerKey(): string {
+  return xdr.LedgerKey.contractData(
+    new xdr.LedgerKeyContractData({
+      contract: xdr.ScAddress.scAddressTypeContract(Buffer.alloc(32)),
+      key: xdr.ScVal.scvSymbol('temporary-item'),
+      durability: xdr.ContractDataDurability.temporary(),
+    }),
+  ).toXDR('base64')
+}
 
 const mockGetLedgerEntries = vi.fn()
 const mockDecodeScVal = vi.fn()
@@ -29,13 +40,15 @@ describe('loadContract action', () => {
     const { resetStore, getStoreState, useLensStore } =
       await import('../../store/lensStore')
     resetStore()
+    const temporaryKey = makeTemporaryLedgerKey()
 
     mockGetLedgerEntries.mockResolvedValue({
       entries: [
         {
-          key: 'key-1',
+          key: temporaryKey,
           xdr: 'xdr-1',
           lastModifiedLedgerSeq: 7,
+          liveUntilLedgerSeq: 50,
         },
       ],
       latestLedger: 100,
@@ -52,10 +65,16 @@ describe('loadContract action', () => {
     await useLensStore.getState().loadContract('C1', ['rpc-key-1'])
 
     const state = getStoreState()
+    const loadedEntry = state.ledgerData[`C1::Other::${temporaryKey}`]
     expect(state.activeContractId).toBe('C1')
     expect(state.contractLoadStatus).toBe(ContractLoadStatus.SUCCESS)
     expect(Object.keys(state.ledgerData)).toHaveLength(1)
-    expect(state.ledgerData['C1::Other::key-1'].rawXdr).toBe('xdr-1')
+    expect(loadedEntry.rawXdr).toBe('xdr-1')
+    expect(loadedEntry.durability).toBe('Temporary')
+    expect(loadedEntry.expired).toBe(true)
+    expect(loadedEntry.value).toMatchObject({
+      value: 'decoded',
+    })
   })
 
   it('sets EMPTY when the load succeeds with no entries', async () => {
