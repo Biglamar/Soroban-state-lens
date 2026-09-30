@@ -36,7 +36,9 @@ function getMapKeyLabel(node: Node, index: number): string {
   return preview === null ? baseLabel : `${baseLabel} (${preview})`
 }
 
-function getChildren(node: Node): Array<{ idPart: string; label: string; node: Node }> {
+function getChildren(
+  node: Node,
+): Array<{ idPart: string; label: string; node: Node }> {
   if (node.kind === 'vec') {
     return node.items.map((child, index) => ({
       idPart: `item-${index}`,
@@ -73,8 +75,10 @@ function walkNode(params: {
   depth: number
   label: string
   expandedIds: Set<string>
+  expired?: boolean
 }): void {
-  const { rows, node, id, parentId, depth, label, expandedIds } = params
+  const { rows, node, id, parentId, depth, label, expandedIds, expired } =
+    params
   const children = getChildren(node)
 
   rows.push({
@@ -87,6 +91,7 @@ function walkNode(params: {
     hasChildren: children.length > 0,
     childCount: children.length,
     node,
+    ...(expired ? { expired: true } : {}),
   })
 
   if (!isExpandable(node) || !expandedIds.has(id)) {
@@ -126,6 +131,7 @@ export function flattenTree(
       depth: 0,
       label: root.label,
       expandedIds,
+      expired: root.expired,
     })
   }
 

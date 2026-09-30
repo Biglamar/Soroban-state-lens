@@ -70,7 +70,7 @@ export async function getLatestLedgerConnectionCheck(
       : timeoutOrOptions?.timeoutMs ?? timeoutOrOptions?.timeout
   const signal =
     typeof timeoutOrOptions === 'object'
-      ? timeoutOrOptions?.signal ?? callerSignal
+      ? timeoutOrOptions.signal ?? callerSignal
       : callerSignal
 
   if (signal?.aborted) {

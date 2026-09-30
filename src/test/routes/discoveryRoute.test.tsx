@@ -21,7 +21,7 @@ interface JsonRpcRequest {
   method: string
 }
 
-function getRpcRequests(method: string) {
+function getRpcPayloads(method: string) {
   return vi.mocked(fetch).mock.calls.filter(([, init]) => {
     const request = JSON.parse(String(init?.body)) as JsonRpcRequest
     return request.method === method
@@ -53,7 +53,7 @@ function renderDiscoveryRoute() {
     defaultPreload: 'intent',
     defaultPreloadStaleTime: 0,
   })
-  return render(<RouterProvider router={router} />)
+  return { router, ...render(<RouterProvider router={router} />) }
 }
 
 async function fillValidForm() {
@@ -90,7 +90,7 @@ describe('Discovery route', () => {
       screen.getByRole('button', { name: 'Simulate transaction' }),
     )
 
-    expect(getRpcRequests('simulateTransaction')).toHaveLength(0)
+    expect(getRpcPayloads('simulateTransaction')).toHaveLength(0)
     expect(
       screen.getByLabelText('Function name').getAttribute('aria-invalid'),
     ).toBe('true')
@@ -106,7 +106,7 @@ describe('Discovery route', () => {
     )
 
     expect(await screen.findByText('Transaction XDR is required.')).toBeTruthy()
-    expect(getRpcRequests('simulateTransaction')).toHaveLength(0)
+    expect(getRpcPayloads('simulateTransaction')).toHaveLength(0)
   })
 
   it('simulates the transaction and displays normalized discovered keys', async () => {
@@ -181,6 +181,79 @@ describe('Discovery route', () => {
     ).toBeNull()
   })
 
+  it('maps common authorization failures to actionable discovery messages', async () => {
+    mockRpcResponse((request) =>
+      request.method === 'getLatestLedger'
+        ? { result: { sequence: 123 } }
+        : {
+            error: {
+              code: -32001,
+              message: 'Unauthorized: invalid auth token',
+            },
+          },
+    )
+    renderDiscoveryRoute()
+    await fillValidForm()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Simulate transaction' }),
+    )
+
+    expect(
+      await screen.findByText(
+        'Authorization failed: check your RPC credentials and try again.',
+      ),
+    ).toBeTruthy()
+    expect(screen.queryByText('RPC Error (-32001)')).toBeNull()
+  })
+
+  it('maps expired authorization to an actionable discovery message', async () => {
+    mockRpcResponse((request) =>
+      request.method === 'getLatestLedger'
+        ? { result: { sequence: 123 } }
+        : {
+            error: {
+              code: -32002,
+              message: 'Auth token has expired',
+            },
+          },
+    )
+    renderDiscoveryRoute()
+    await fillValidForm()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Simulate transaction' }),
+    )
+
+    expect(
+      await screen.findByText(
+        'Authorization expired: refresh your RPC credentials and try again.',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('maps missing authorization to an actionable discovery message', async () => {
+    mockRpcResponse((request) =>
+      request.method === 'getLatestLedger'
+        ? { result: { sequence: 123 } }
+        : {
+            error: {
+              code: -32003,
+              message: 'Missing authorization header',
+            },
+          },
+    )
+    renderDiscoveryRoute()
+    await fillValidForm()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Simulate transaction' }),
+    )
+
+    expect(
+      await screen.findByText(
+        'Authorization required: add your RPC credentials and try again.',
+      ),
+    ).toBeTruthy()
+  })
+
   it('aborts a pending simulation when the route unmounts', async () => {
     let resolveResponse: (response: Response) => void = () => undefined
     vi.mocked(fetch).mockImplementation((_input, init) => {
@@ -206,9 +279,9 @@ describe('Discovery route', () => {
       screen.getByRole('button', { name: 'Simulate transaction' }),
     )
     await waitFor(() =>
-      expect(getRpcRequests('simulateTransaction')).toHaveLength(1),
+      expect(getRpcPayloads('simulateTransaction')).toHaveLength(1),
     )
-    const [, init] = getRpcRequests('simulateTransaction')[0]
+    const [, init] = getRpcPayloads('simulateTransaction')[0]
     const signal = init?.signal as AbortSignal
 
     view.unmount()
@@ -227,5 +300,103 @@ describe('Discovery route', () => {
       await Promise.resolve()
       await Promise.resolve()
     })
+  })
+
+  it('does not warn when leaving a clean discovery form', async () => {
+    renderDiscoveryRoute()
+    await screen.findByLabelText('Function name')
+
+    const event = new Event('beforeunload', { cancelable: true })
+    const result = window.dispatchEvent(event)
+
+    expect(result).toBe(true)
+    expect(event.defaultPrevented).toBe(false)
+  })
+
+  it('warns when leaving with a dirty discovery transaction draft', async () => {
+    renderDiscoveryRoute()
+    fireEvent.change(await screen.findByLabelText('Transaction XDR'), {
+      target: { value: 'base64-transaction-xdr' },
+    })
+
+    const event = new Event('beforeunload', { cancelable: true })
+    const result = window.dispatchEvent(event)
+
+    expect(result).toBe(false)
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('blocks in-app navigation when the draft is dirty', async () => {
+    const { router } = renderDiscoveryRoute()
+    fireEvent.change(await screen.findByLabelText('Transaction XDR'), {
+      target: { value: 'base64-transaction-xdr' },
+    })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    void router.navigate({ to: '/settings/preferences' })
+
+    await waitFor(() =>
+      expect(confirm).toHaveBeenCalledWith(
+        'You have unsaved discovery input. Leave this page?',
+      ),
+    )
+    expect(window.location.pathname).toBe(
+      `/contracts/${VALID_CONTRACT_ID}/discovery`,
+    )
+  })
+
+  it('allows in-app navigation after confirming the dirty draft warning', async () => {
+    const { router } = renderDiscoveryRoute()
+    fireEvent.change(await screen.findByLabelText('Transaction XDR'), {
+      target: { value: 'base64-transaction-xdr' },
+    })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    void router.navigate({ to: '/settings/preferences' })
+
+    await waitFor(() =>
+      expect(window.location.pathname).toBe('/settings/preferences'),
+    )
+  })
+
+  it('warns when leaving with a dirty discovery argument draft', async () => {
+    renderDiscoveryRoute()
+    fireEvent.change(await screen.findByLabelText('Arguments (JSON reference)'), {
+      target: { value: '{"limit": 5}' },
+    })
+
+    const event = new Event('beforeunload', { cancelable: true })
+    const result = window.dispatchEvent(event)
+
+    expect(result).toBe(false)
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('stops warning after a successful simulation clears the dirty state', async () => {
+    mockRpcResponse((request) =>
+      request.method === 'getLatestLedger'
+        ? { result: { sequence: 123 } }
+        : { result: { footprint: { readOnly: ['read-key'] } } },
+    )
+    renderDiscoveryRoute()
+    await fillValidForm()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Simulate transaction' }),
+    )
+    await screen.findByText('read-key')
+
+    const event = new Event('beforeunload', { cancelable: true })
+    const result = window.dispatchEvent(event)
+
+    expect(result).toBe(true)
+    expect(event.defaultPrevented).toBe(false)
+    expect(screen.getByLabelText('Function name')).toHaveProperty(
+      'value',
+      'read_state',
+    )
+    expect(screen.getByLabelText('Transaction XDR')).toHaveProperty(
+      'value',
+      'base64-transaction-xdr',
+    )
   })
 })

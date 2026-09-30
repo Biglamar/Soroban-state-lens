@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  mapSimulationAuthError,
   simulateTransaction,
   simulateTransactionAdapter,
 } from '../../lib/network/simulateTransaction'
@@ -9,6 +10,44 @@ import { extractFootprintKeys } from '../../lib/network/footprint'
 vi.mock('../../lib/rpc/toRpcRequestId', () => ({
   toRpcRequestId: vi.fn(() => 1),
 }))
+
+describe('mapSimulationAuthError', () => {
+  it('returns the original message when no auth pattern matches', () => {
+    expect(mapSimulationAuthError('Some other failure')).toBe(
+      'Some other failure',
+    )
+  })
+
+  it('maps invalid auth entries to an actionable message', () => {
+    expect(mapSimulationAuthError('Invalid auth entry')).toContain(
+      'Authorization entry is invalid',
+    )
+  })
+
+  it('maps missing auth entries to an actionable message', () => {
+    expect(mapSimulationAuthError('Missing auth entry')).toContain(
+      'Authorization entry is missing',
+    )
+  })
+
+  it('maps auth failures to an actionable message', () => {
+    expect(mapSimulationAuthError('Auth failed')).toContain(
+      'Authorization failed',
+    )
+  })
+
+  it('maps invalid signatures to an actionable message', () => {
+    expect(mapSimulationAuthError('Invalid signature')).toContain(
+      'Authorization signature is invalid',
+    )
+  })
+
+  it('matches case-insensitively', () => {
+    expect(mapSimulationAuthError('INVALID AUTH')).toContain(
+      'Authorization entry is invalid',
+    )
+  })
+})
 
 describe('simulateTransactionAdapter', () => {
   it('should return success false when response is null', () => {
@@ -27,6 +66,12 @@ describe('simulateTransactionAdapter', () => {
     const result = simulateTransactionAdapter({ error: 'Transaction failed' })
     expect(result.success).toBe(false)
     expect(result.error).toBe('Transaction failed')
+  })
+
+  it('maps auth errors from the response body', () => {
+    const result = simulateTransactionAdapter({ error: 'Invalid auth entry' })
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Authorization entry is invalid')
   })
 
   it('should return typed response shape on success', () => {
@@ -85,6 +130,34 @@ describe('simulateTransactionAdapter', () => {
       })
     },
   )
+
+  it('filters malformed result records while keeping valid siblings', () => {
+    const result = simulateTransactionAdapter({
+      results: [
+        { xdr: 'valid-xdr', auth: [] },
+        null,
+        { xdr: 42 },
+        { auth: 'invalid-auth' },
+        ['not', 'a', 'record'],
+        { unexpected: true },
+        { auth: [{ credentials: 'valid' }] },
+      ],
+    })
+
+    expect(result.results).toEqual([
+      { xdr: 'valid-xdr', auth: [] },
+      { auth: [{ credentials: 'valid' }] },
+    ])
+  })
+
+  it('treats a non-array result collection as empty', () => {
+    const result = simulateTransactionAdapter({
+      results: { xdr: 'not-an-array' },
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.results).toEqual([])
+  })
 
   it('accepts a nonnegative integer latest ledger', () => {
     expect(simulateTransactionAdapter({ latestLedger: 100 })).toMatchObject({
@@ -312,6 +385,26 @@ describe('simulateTransaction request helper', () => {
 
     expect(result.success).toBe(false)
     expect(result.error).toContain('RPC Error')
+  })
+
+  it('maps JSON-RPC auth errors to actionable messages', async () => {
+    const rpcResponse = {
+      jsonrpc: '2.0',
+      id: 1,
+      error: { code: -32000, message: 'Invalid auth entry' },
+    }
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => rpcResponse,
+    } as Response)
+
+    const result = await simulateTransaction({
+      rpcUrl: mockRpcUrl,
+      transaction: 'base64-xdr',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Authorization entry is invalid')
   })
 
   it('returns a handled error on HTTP failure', async () => {

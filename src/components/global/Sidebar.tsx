@@ -10,7 +10,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { downloadSnapshotDiff } from '../../lib/diff/exportSnapshotDiff'
 import { resolveDiffStatus } from '../../lib/diff/resolveDiffStatus'
 import { formatContractIdShort } from '../../lib/format/formatContractIdShort'
@@ -294,6 +294,10 @@ function HistoryPanel() {
   const addSnapshot = useLensStore((state) => state.addSnapshot)
   const removeSnapshot = useLensStore((state) => state.removeSnapshot)
   const clearSnapshots = useLensStore((state) => state.clearSnapshots)
+  const [previousSnapshotId, setPreviousSnapshotId] = useState<string | null>(
+    null,
+  )
+  const [nextSnapshotId, setNextSnapshotId] = useState<string | null>(null)
 
   const ledgerData = useLensStore((state) => state.ledgerData)
   const currentLedgerSequence = useLensStore(
@@ -331,23 +335,50 @@ function HistoryPanel() {
     clearSnapshots(activeContractId)
   }
 
+  const hasInsufficient = snapshots.length < 2
+  const latestPreviousSnapshot = snapshots.at(-2)
+  const latestNextSnapshot = snapshots.at(-1)
+  const requestedPreviousSnapshot = snapshots.find(
+    (snapshot) => snapshot.id === previousSnapshotId,
+  )
+  const requestedNextSnapshot = snapshots.find(
+    (snapshot) => snapshot.id === nextSnapshotId,
+  )
+  const previousSnapshot = requestedPreviousSnapshot ?? latestPreviousSnapshot
+  const nextSnapshot = requestedNextSnapshot ?? latestNextSnapshot
+  const selectedSnapshotsMatch = previousSnapshot?.id === nextSnapshot?.id
+  const comparisonPreviousSnapshot = selectedSnapshotsMatch
+    ? latestPreviousSnapshot
+    : previousSnapshot
+  const comparisonNextSnapshot = selectedSnapshotsMatch
+    ? latestNextSnapshot
+    : nextSnapshot
+
   const handleDownloadDiff = () => {
-    if (snapshots.length < 2) return
-
-    const prev = snapshots[snapshots.length - 2]
-    const next = snapshots[snapshots.length - 1]
-
-    downloadSnapshotDiff(prev, next)
+    if (comparisonPreviousSnapshot && comparisonNextSnapshot) {
+      downloadSnapshotDiff(comparisonPreviousSnapshot, comparisonNextSnapshot)
+    }
   }
 
-  const hasInsufficient = snapshots.length < 2
+  const handleRemoveSnapshot = (snapshotId: string, label: string) => {
+    if (!activeContractId) return
+    if (
+      !window.confirm(
+        `Delete ${label} for ${activeContractId}? This action cannot be undone.`,
+      )
+    ) {
+      return
+    }
 
-  // Compute diff summary if 2 or more snapshots exist
+    removeSnapshot(activeContractId, snapshotId)
+  }
+
+  // Compute the selected diff summary if 2 or more snapshots exist
   const diffSummary = useMemo(() => {
-    if (snapshots.length < 2) return null
+    if (!comparisonPreviousSnapshot || !comparisonNextSnapshot) return null
 
-    const prev = snapshots[snapshots.length - 2]
-    const next = snapshots[snapshots.length - 1]
+    const prev = comparisonPreviousSnapshot
+    const next = comparisonNextSnapshot
 
     const prevKeys = Object.keys(prev.ledgerData)
     const nextKeys = Object.keys(next.ledgerData)
@@ -379,15 +410,15 @@ function HistoryPanel() {
     }
 
     return {
-      prevLabel: prev.label || `Snapshot #${snapshots.length - 1}`,
-      nextLabel: next.label || `Snapshot #${snapshots.length}`,
+      prevLabel: prev.label || `Snapshot #${snapshots.indexOf(prev) + 1}`,
+      nextLabel: next.label || `Snapshot #${snapshots.indexOf(next) + 1}`,
       created,
       deleted,
       modified,
       unchanged,
       total: allKeys.length,
     }
-  }, [snapshots])
+  }, [comparisonNextSnapshot, comparisonPreviousSnapshot, snapshots])
 
   if (!activeContractId) {
     return (
@@ -486,6 +517,49 @@ function HistoryPanel() {
               >
                 {diffSummary?.nextLabel}
               </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-[10px]">
+              <label className="flex flex-col gap-1 text-text-muted">
+                From snapshot
+                <select
+                  aria-label="Compare from snapshot"
+                  value={comparisonPreviousSnapshot?.id ?? ''}
+                  onChange={(event) =>
+                    setPreviousSnapshotId(event.target.value)
+                  }
+                  className="min-w-0 rounded border border-border-dark bg-background-dark px-2 py-1.5 text-white"
+                >
+                  {snapshots.map((snapshot, index) => (
+                    <option
+                      key={snapshot.id}
+                      value={snapshot.id}
+                      disabled={snapshot.id === comparisonNextSnapshot?.id}
+                    >
+                      {snapshot.label || `Snapshot #${index + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-text-muted">
+                To snapshot
+                <select
+                  aria-label="Compare to snapshot"
+                  value={comparisonNextSnapshot?.id ?? ''}
+                  onChange={(event) => setNextSnapshotId(event.target.value)}
+                  className="min-w-0 rounded border border-border-dark bg-background-dark px-2 py-1.5 text-white"
+                >
+                  {snapshots.map((snapshot, index) => (
+                    <option
+                      key={snapshot.id}
+                      value={snapshot.id}
+                      disabled={snapshot.id === comparisonPreviousSnapshot?.id}
+                    >
+                      {snapshot.label || `Snapshot #${index + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
 
             {/* Counts Grid */}
@@ -589,7 +663,12 @@ function HistoryPanel() {
                   </span>
                 </div>
                 <button
-                  onClick={() => removeSnapshot(activeContractId, snap.id)}
+                  onClick={() =>
+                    handleRemoveSnapshot(
+                      snap.id,
+                      snap.label || `Snapshot #${idx + 1}`,
+                    )
+                  }
                   aria-label={`Delete snapshot ${snap.label || `Snapshot #${idx + 1}`} for ${activeContractId}`}
                   className="text-text-muted hover:text-red-400 p-1.5 rounded-md hover:bg-red-500/10 transition-all cursor-pointer shrink-0"
                   title="Delete snapshot"

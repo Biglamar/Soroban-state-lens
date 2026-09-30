@@ -79,7 +79,11 @@ export default function NetworkSelector() {
       } else {
         setCustomRpcUrl(networkConfig.rpcUrl || '')
       }
-      setCustomNetworkPassphrase(networkConfig.networkPassphrase || '')
+      setCustomNetworkPassphrase(
+        networkConfig.networkPassphrase === 'Custom Network'
+          ? ''
+          : networkConfig.networkPassphrase || '',
+      )
       setShowCustomInput(true)
     }
   }, [
@@ -200,6 +204,10 @@ export default function NetworkSelector() {
   }
 
   const handleApplyCustomUrl = () => {
+    if (!customNetworkPassphrase.trim()) {
+      return
+    }
+
     const validation = validateRpcUrl(customRpcUrl)
     if (validation.isValid) {
       abortCustomConnectionTest()
@@ -495,8 +503,23 @@ export default function NetworkSelector() {
                   placeholder="Test SDF Network ; September 2015"
                   className="w-full px-3 py-2 bg-background-dark border border-border-dark focus:border-primary rounded-md text-sm text-white placeholder-text-muted transition-colors focus:outline-none focus:ring-1 focus:ring-primary/20"
                   aria-label="Custom Network Passphrase input"
+                  aria-invalid={!customNetworkPassphrase.trim()}
+                  aria-describedby={
+                    !customNetworkPassphrase.trim()
+                      ? 'network-passphrase-error'
+                      : undefined
+                  }
                 />
               </div>
+
+              {!customNetworkPassphrase.trim() && (
+                <p
+                  id="network-passphrase-error"
+                  className="text-xs text-red-400"
+                >
+                  Network passphrase is required.
+                </p>
+              )}
 
               {validationError && (
                 <p
@@ -579,7 +602,11 @@ export default function NetworkSelector() {
                 <button
                   type="button"
                   onClick={handleApplyCustomUrl}
-                  disabled={!customRpcUrl.trim() || !!validationError}
+                  disabled={
+                    !customRpcUrl.trim() ||
+                    !customNetworkPassphrase.trim() ||
+                    !!validationError
+                  }
                   className="px-3 py-1.5 text-sm bg-primary text-white rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Apply

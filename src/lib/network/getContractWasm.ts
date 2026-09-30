@@ -72,10 +72,7 @@ export async function getContractWasm(
     const response = await callRpc(
       {
         url: params.rpcUrl,
-  timeout: normalizeTimeoutMs(
-    params.timeoutMs ?? params.timeout,
-    10000,
-  ),
+        timeout: normalizeTimeoutMs(params.timeoutMs ?? params.timeout, 10000),
         signal: params.signal,
       },
       buildJsonRpcRequest('getContractCode', [params.contractId], requestId),

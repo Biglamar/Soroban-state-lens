@@ -30,6 +30,7 @@ export interface LedgerEntry {
   value: unknown
   lastModifiedLedger: number
   expirationLedger?: number
+  expired?: boolean
   rawXdr?: string
   decodeErrorReason?: string
 }
