@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, viMuted } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   mapSimulationAuthError,
   simulateTransaction,
@@ -6,14 +6,16 @@ import {
 } from '../../lib/network/simulateTransaction'
 import { extractFootprintKeys } from '../../lib/network/footprint'
 
-// Allow vi.mock to hoost before imports
+// Allow vi.mock to hoist before imports
 vi.mock('../../lib/rpc/toRpcRequestId', () => ({
   toRpcRequestId: vi.fn(() => 1),
 }))
 
 describe('mapSimulationAuthError', () => {
   it('returns the original message when no auth pattern matches', () => {
-    expect(mapSimulationAuthError('Some other failure')).toBe('Some other failure')
+    expect(mapSimulationAuthError('Some other failure')).toBe(
+      'Some other failure',
+    )
   })
 
   it('maps invalid auth entries to an actionable message', () => {
@@ -156,7 +158,7 @@ describe('extractFootprintKeys', () => {
   })
 
   it('should return empty arrays when footprint is empty', () => {
-    const result = extractFootprintKeys( {})
+    const result = extractFootprintKeys({})
     expect(result.readOnly).toEqual([])
     expect(result.readWrite).toEqual([])
   })
@@ -249,11 +251,11 @@ describe('simulateTransaction request helper', () => {
       expect.objectContaining({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: expect.stringContaining('"rmethod":"simulateTransaction"'),
+        body: expect.stringContaining('"method":"simulateTransaction"'),
       }),
     )
     expect(
-      JSON.parse(vi.mocked(fetch).mock[0][1]?.body as string),
+      JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string),
     ).toMatchObject({
       jsonrpc: '2.0',
       method: 'simulateTransaction',
@@ -354,9 +356,7 @@ describe('simulateTransaction request helper', () => {
     })
 
     expect(result.success).toBe(false)
-    expect(result.error).toContain(
-      'Authorization entry is invalid',
-    )
+    expect(result.error).toContain('Authorization entry is invalid')
   })
 
   it('returns a handled error on HTTP failure', async () => {
@@ -458,7 +458,7 @@ describe('simulateTransaction request helper', () => {
       json: async () => ({
         jsonrpc: '2.0',
         id: 9999,
-        error: { code: -32000, message: 'Simulation failed' },
+        error: { code: -32600, message: 'Invalid Request' },
       }),
     } as Response)
 

@@ -23,27 +23,3 @@ export interface LatestLedgerResult {
   protocolVersion?: number
   sequence: number
 }
-
-/**
- * Authorization failure classifications that the app can recognize and
- * translate into concise, actionable discovery messages.
- */
-export type AuthErrorKind =
-  | 'missing-credentials'
-  | 'invalid-credentials'
-  | 'expired-credentials'
-  | 'insufficient-scope'
-  | 'rate-limited'
-  | 'unknown'
-
-/**
- * Stable authorization error shape returned by the network layer when an
- * RPC response indicates an authorization failure. The `message` field is
- * already mapped to a concise, actionable discovery message suitable for
- * rendering directly to the user.
- */
-export interface AuthError extends RpcError {
-  kind: AuthErrorKind
-  /** Action the user can take to resolve the failure. */
-  action?: string
-}

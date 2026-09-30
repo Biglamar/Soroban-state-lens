@@ -10,7 +10,7 @@ import { toRpcRequestId } from '../rpc/toRpcRequestId'
 import { callRpc } from './rpcClient'
 import type { RpcError } from './types'
 
-export interface SimulateTransactionParams+
+export interface SimulateTransactionParams {
   rpcUrl: string
   /** Base64 transaction envelope XDR to simulate. */
   transaction: string
@@ -44,7 +44,7 @@ export interface SimulateTransactionResult {
   error?: string
 }
 
-const activeSimulationControllers= new Map<string, AbortController>()
+const activeSimulationControllers = new Map<string, AbortController>()
 
 const abortedSimulationResult: SimulateTransactionResult = {
   success: false,
@@ -75,6 +75,30 @@ function isRpcError(value: unknown): value is RpcError {
  */
 export function mapSimulationAuthError(message: string): string {
   const normalized = message.toLowerCase()
+
+  if (
+    /expired (auth|authorization)? ?(token|credential)|token has expired/.test(
+      normalized,
+    )
+  ) {
+    return 'Authorization expired: refresh your RPC credentials and try again.'
+  }
+
+  if (
+    /missing authorization header|authorization required|missing (auth|authorization) token/.test(
+      normalized,
+    )
+  ) {
+    return 'Authorization required: add your RPC credentials and try again.'
+  }
+
+  if (
+    /unauthorized|invalid auth token|invalid authorization token/.test(
+      normalized,
+    )
+  ) {
+    return 'Authorization failed: check your RPC credentials and try again.'
+  }
 
   if (
     normalized.includes('invalid auth') ||

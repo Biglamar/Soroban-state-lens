@@ -58,38 +58,6 @@ export function buildDiscoveryLoadState(
   }
 }
 
-export function mapSimulationAuthError(
-  error: string | null | undefined,
-): string | null {
-  if (typeof error !== 'string') {
-    return null
-  }
-  const normalized = error.toLowerCase()
-  if (
-    normalized.includes('unauthorized') ||
-    normalized.includes('not authorized') ||
-    normalized.includes('authorization') ||
-    normalized.includes('auth')
-  ) {
-    return 'Simulation authorization failed. Verify the transaction is signed by the required account and that all necessary auth entries are included.'
-  }
-  if (
-    normalized.includes('signature') ||
-    normalized.includes('signed') ||
-    normalized.includes('signing')
-  ) {
-    return 'Simulation signature check failed. Re-sign the transaction with the correct key and retry.'
-  }
-  if (
-    normalized.includes('forbidden') ||
-    normalized.includes('permission') ||
-    normalized.includes('access denied')
-  ) {
-    return 'Simulation was denied access. Confirm the account has permission to invoke this contract function.'
-  }
-  return null
-}
-
 export function DiscoveryStateView({
   state,
   onRetry,
@@ -151,9 +119,6 @@ export function DiscoveryStateView({
   }
 
   if (state.status === 'error') {
-    const authMessage = mapSimulationAuthError(state.error)
-    const displayMessage =
-      authMessage ?? state.error ?? 'An unknown error occurred while discovering keys.'
     return (
       <Card>
         <div className="p-6 space-y-4 border border-red-500/20 bg-red-500/5 rounded-xl">
@@ -161,7 +126,7 @@ export function DiscoveryStateView({
             Discovery failed
           </Heading>
           <p className="text-text-muted text-sm">
-            {displayMessage}
+            {state.error ?? 'An unknown error occurred while discovering keys.'}
           </p>
           {onRetry && (
             <div>
@@ -305,11 +270,10 @@ export function DiscoveryRoute() {
       if (controller.signal.aborted) return
 
       if (!result.success) {
-        const authMessage = mapSimulationAuthError(result.error)
         setState(
           buildDiscoveryLoadState({
             status: 'error',
-            error: authMessage ?? result.error ?? 'Simulation failed.',
+            error: result.error ?? 'Simulation failed.',
           }),
         )
         return

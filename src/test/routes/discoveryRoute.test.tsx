@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { RouterProvider, createRouter } from '@tanstack/router-react'
+import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { routeTree } from '../../routeTree.gen'
 import { resetStore, useLensStore } from '../../store/lensStore'
@@ -26,11 +26,6 @@ function getRpcPayloads(method: string) {
     const request = JSON.parse(String(init?.body)) as JsonRpcRequest
     return request.method === method
   })
-}
-
-function getRpcPayload(method: string) {
-  const calls = getRpcPayloads(method)
-  return calls.length > 0 ? calls[calls.length - 1] : undefined
 }
 
 function mockRpcResponse(
