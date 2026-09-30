@@ -27,8 +27,9 @@ Soroban stores data in the ledger as ScVal (Stellar Contract Values) within Cont
 
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/)
 - **Routing**: [TanStack Router](https://tanstack.com/router) (File-based routing in `src/routes`)
-- **Data Fetching**: [TanStack Query](https://tanstack.com/query)
-- **State Management**: [TanStack Store](https://tanstack.com/store)
+- **Soroban RPC**: Fetch-based helpers in `src/lib/network` for ledger reads, simulation, and retries
+- **State Management**: [Zustand](https://zustand.docs.pmnd.rs/) (`src/store/lensStore.ts`)
+- **Stellar UI & XDR**: [`@stellar/design-system`](https://github.com/stellar/stellar-design-system) and [`@stellar/stellar-sdk`](https://github.com/stellar/js-stellar-sdk)
 
 ### **Installation**
 
@@ -52,16 +53,25 @@ The project is split into three main layers:
 
 1. **The Scraper:** Periodically polls the RPC getLedgerEntries method for a specific ContractID.
 2. **The Decoder:** A Web Worker handling heavy XDR parsing and mapping raw bytes to the contract's Interface Specification (IDL).
-3. **The Visualizer:** A **React** frontend using @stellar/design-system, zustand for state, and react-window for efficiently rendering deep data structures.
+3. **The Visualizer:** A **React** frontend using @stellar/design-system, Zustand for state, and Stellar SDK helpers for rendering decoded contract data.
 
 ## **🗺 Roadmap**
 
-- \[ \] **Phase 1:** Basic ScVal to JSON decoding and tree view.
-- \[ \] **Phase 2:** Support for persistent storage types (Persistent vs. Temporary vs. Instance).
-- \[ \] **Phase 3:** Desktop Distribution — Implementing **Tauri** to provide a standalone cross-platform app.
-- \[ \] **Phase 4:** Integration with stellar-cli to launch the lens directly from a local environment.
+The backlog is organized around the [phase:0](https://github.com/Vynix-Labs/Soroban-state-lens/labels/phase%3A0) through [phase:7](https://github.com/Vynix-Labs/Soroban-state-lens/labels/phase%3A7) labels. Each phase groups related work so contributors can pick tasks that match their skills and the current milestone.
+
+- **Phase 0 — Test Foundation:** Restore and stabilize the Vitest browser-mode test harness.
+- **Phase 1 — Explorer Scaffolding:** Scaffold the contract explorer route, validate inputs, and persist user preferences and watchlists.
+- **Phase 2 — Decoding Utilities:** Build formatting helpers and worker-driven ScVal decoding for maps, vectors, and primitive types.
+- **Phase 3 — Explorer Interaction:** Add tree controls, row previews, and navigation between explorer and inspect views.
+- **Phase 4 — Spec & Labeling:** Parse contract specs from WASM, resolve struct/enum labels, and surface schema-mismatch warnings.
+- **Phase 5 — Discovery & Simulation:** Simulate transactions, extract footprints, and provide a discovery UI for callable contract functions.
+- **Phase 6 — History & Diff:** Capture snapshots, compute semantic diffs, and present history empty states and summary cards.
+- **Phase 7 — Polish & Tests:** Add component-level tests, pull-request templates, and other repository hygiene.
 
 ## **🤝 Contributing**
+
+The catalog and publishing checks are documented in the
+[contributor issue-wave workflow](docs/ISSUE_WAVE_WORKFLOW.md).
 
 We love contributors\! Whether you are a Rustacean who loves XDR or a Frontend dev with an eye for UX:
 

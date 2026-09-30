@@ -8,6 +8,7 @@ import type { RpcError, RpcRequestOptions } from './types'
 export interface GetContractWasmParams extends RpcRequestOptions {
   rpcUrl: string
   contractId: string
+  timeout?: number
 }
 
 export interface GetContractWasmSuccess {
@@ -67,17 +68,17 @@ export async function getContractWasm(
   params: GetContractWasmParams,
 ): Promise<GetContractWasmResult> {
   try {
+    const requestId = toRpcRequestId()
     const response = await callRpc(
       {
         url: params.rpcUrl,
-        timeout: normalizeTimeoutMs(params.timeoutMs, 10000),
+  timeout: normalizeTimeoutMs(
+    params.timeoutMs ?? params.timeout,
+    10000,
+  ),
         signal: params.signal,
       },
-      buildJsonRpcRequest(
-        'getContractCode',
-        [params.contractId],
-        toRpcRequestId(),
-      ),
+      buildJsonRpcRequest('getContractCode', [params.contractId], requestId),
     )
 
     if (isRpcError(response)) {
@@ -87,7 +88,7 @@ export async function getContractWasm(
       }
     }
 
-    if (!isJsonRpcSuccessResponse(response)) {
+    if (!isJsonRpcSuccessResponse(response, requestId)) {
       return {
         success: false,
         error: 'Invalid response from RPC server',

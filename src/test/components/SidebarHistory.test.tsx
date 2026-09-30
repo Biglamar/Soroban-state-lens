@@ -2,9 +2,14 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Sidebar from '../../components/global/Sidebar'
 import { resetStore, useLensStore } from '../../store/lensStore'
+import { formatContractIdShort } from '../../lib/format/formatContractIdShort'
 import type { LedgerEntry } from '../../store/types'
 
-const makeEntry = (key: string, contractId: string, value: unknown = 'value'): LedgerEntry => ({
+const makeEntry = (
+  key: string,
+  contractId: string,
+  value: unknown = 'value',
+): LedgerEntry => ({
   key,
   contractId,
   type: 'ContractData',
@@ -19,10 +24,28 @@ describe('Sidebar History Panel', () => {
 
   it('renders default tree placeholder when activeNavItem is not history', () => {
     render(<Sidebar open={true} onClose={vi.fn()} activeNavItem="watchlist" />)
-    
+
     expect(screen.getByText('Ledger State')).toBeTruthy()
     expect(screen.getByText('Contract_Registry')).toBeTruthy()
     expect(screen.queryByText('Capture First')).toBeNull()
+  })
+
+  it('shows a shortened active contract label in the sidebar header', () => {
+    const activeContractId =
+      'CDLZFC3SYQJ4S7HBE6A5PTLQO7N4M3YX2WT4EFQ4PTJX3S7PZN6MTEST'
+    useLensStore.getState().setActiveContractId(activeContractId)
+
+    render(<Sidebar open={true} onClose={vi.fn()} activeNavItem="watchlist" />)
+
+    const label = screen.getByText(formatContractIdShort(activeContractId))
+    expect(label).toBeTruthy()
+    expect(label.getAttribute('title')).toBe(activeContractId)
+  })
+
+  it('hides the active contract label when no contract is active', () => {
+    render(<Sidebar open={true} onClose={vi.fn()} activeNavItem="watchlist" />)
+
+    expect(screen.queryByText('-')).toBeNull()
   })
 
   it('renders no active contract message when activeNavItem is history but activeContractId is null', () => {
@@ -48,7 +71,7 @@ describe('Sidebar History Panel', () => {
   it('allows capturing snapshot when ledger entries are loaded', () => {
     const state = useLensStore.getState()
     state.setActiveContractId('c1')
-    
+
     // Mock loaded ledger entries in store
     state.upsertLedgerEntries([
       makeEntry('key1', 'c1', 'val1'),
@@ -57,7 +80,9 @@ describe('Sidebar History Panel', () => {
 
     render(<Sidebar open={true} onClose={vi.fn()} activeNavItem="history" />)
 
-    const captureButton = screen.getByRole('button', { name: /Capture Snapshot/i })
+    const captureButton = screen.getByRole('button', {
+      name: /Capture Snapshot/i,
+    })
     expect(captureButton).toBeTruthy()
     expect(captureButton.hasAttribute('disabled')).toBe(false)
 
@@ -71,6 +96,28 @@ describe('Sidebar History Panel', () => {
     // Now it should show Diff Summary instead of Capture First
     expect(screen.queryByText('Capture First')).toBeNull()
     expect(screen.getByText('Diff Summary')).toBeTruthy()
+  })
+
+  it('captures with Ctrl or Command+Shift+S but ignores editable controls', () => {
+    const state = useLensStore.getState()
+    state.setActiveContractId('c1')
+    state.upsertLedgerEntries([makeEntry('key1', 'c1', 'value')])
+    render(
+      <>
+        <input aria-label="Editable field" />
+        <Sidebar open={false} onClose={vi.fn()} activeNavItem="watchlist" />
+      </>,
+    )
+
+    fireEvent.keyDown(screen.getByLabelText('Editable field'), {
+      key: 's',
+      ctrlKey: true,
+      shiftKey: true,
+    })
+    expect(useLensStore.getState().getSnapshots('c1')).toHaveLength(0)
+
+    fireEvent.keyDown(document, { key: 's', metaKey: true, shiftKey: true })
+    expect(useLensStore.getState().getSnapshots('c1')).toHaveLength(1)
   })
 
   it('displays counts for created, deleted, modified, and unchanged entries', () => {
@@ -92,8 +139,8 @@ describe('Sidebar History Panel', () => {
     }
 
     // Programmatically add snapshots
-    state.addSnapshot('c1', snap1, 'Snapshot #1')
-    state.addSnapshot('c1', snap2, 'Snapshot #2')
+    state.addSnapshot('c1', snap1, 12345, 'Snapshot #1')
+    state.addSnapshot('c1', snap2, 12346, 'Snapshot #2')
 
     render(<Sidebar open={true} onClose={vi.fn()} activeNavItem="history" />)
 
