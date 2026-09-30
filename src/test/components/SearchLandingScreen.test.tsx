@@ -24,4 +24,18 @@ describe('SearchLandingScreen recent history action', () => {
       screen.getByRole('textbox', { name: 'Contract ID or ledger key' }),
     ).toBeTruthy()
   })
+
+  it('disables wallet connection with clear unavailable status', () => {
+    render(<SearchLandingScreen />)
+
+    const walletBtn = screen.getByRole('button', {
+      name: /Connect Wallet/i,
+    })
+    expect(walletBtn).toBeTruthy()
+    expect(walletBtn.hasAttribute('disabled')).toBe(true)
+    expect(walletBtn.getAttribute('aria-disabled')).toBe('true')
+    expect(walletBtn.getAttribute('title')).toBe(
+      'Wallet connection is currently unavailable',
+    )
+  })
 })

@@ -39,6 +39,11 @@ describe('TreeRow', () => {
     )
 
     expect(screen.queryByRole('button', { name: /toggle/i })).toBeNull()
+    expect(
+      screen
+        .getByRole('treeitem', { name: 'Open entry[0].value' })
+        .getAttribute('aria-level'),
+    ).toBe('3')
     expect(screen.getByText('hello')).toBeTruthy()
     expect(screen.getByText('string')).toBeTruthy()
   })
@@ -96,7 +101,7 @@ describe('TreeRow', () => {
       />,
     )
 
-    const expandableRow = screen.getByRole('button', {
+    const expandableRow = screen.getByRole('treeitem', {
       name: 'Open entry[0].value',
     })
     expect(expandableRow.getAttribute('aria-expanded')).toBe('false')
@@ -116,7 +121,7 @@ describe('TreeRow', () => {
     )
     expect(
       screen
-        .getByRole('button', { name: 'Open entry[0].value' })
+        .getByRole('treeitem', { name: 'Open entry[0].value' })
         .getAttribute('aria-expanded'),
     ).toBeNull()
   })
@@ -135,7 +140,9 @@ describe('TreeRow', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open entry[0].value' }))
+    fireEvent.click(
+      screen.getByRole('treeitem', { name: 'Open entry[0].value' }),
+    )
     expect(onActivate).toHaveBeenCalledWith(row)
   })
 
@@ -153,9 +160,11 @@ describe('TreeRow', () => {
       />,
     )
 
-    const button = screen.getByRole('button', { name: 'Open entry[0].value' })
-    fireEvent.keyDown(button, { key: 'Enter' })
-    fireEvent.keyDown(button, { key: ' ' })
+    const treeitem = screen.getByRole('treeitem', {
+      name: 'Open entry[0].value',
+    })
+    fireEvent.keyDown(treeitem, { key: 'Enter' })
+    fireEvent.keyDown(treeitem, { key: ' ' })
 
     expect(onActivate).toHaveBeenCalledTimes(2)
     expect(onActivate).toHaveBeenCalledWith(row)
@@ -175,9 +184,11 @@ describe('TreeRow', () => {
       />,
     )
 
-    const button = screen.getByRole('button', { name: 'Open entry[0].value' })
-    fireEvent.keyDown(button, { key: 'ArrowDown' })
-    fireEvent.keyDown(button, { key: 'ArrowUp' })
+    const treeitem = screen.getByRole('treeitem', {
+      name: 'Open entry[0].value',
+    })
+    fireEvent.keyDown(treeitem, { key: 'ArrowDown' })
+    fireEvent.keyDown(treeitem, { key: 'ArrowUp' })
 
     expect(onKeyNavigate).toHaveBeenNthCalledWith(1, 'down')
     expect(onKeyNavigate).toHaveBeenNthCalledWith(2, 'up')
