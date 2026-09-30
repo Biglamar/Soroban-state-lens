@@ -169,11 +169,12 @@ describe('Sidebar History Panel', () => {
   it('updates the diff summary when an older snapshot pair is selected', () => {
     const state = useLensStore.getState()
     state.setActiveContractId('c1')
-    state.addSnapshot('c1', { key: makeEntry('key', 'c1', 'same') }, 'Older')
-    state.addSnapshot('c1', { key: makeEntry('key', 'c1', 'same') }, 'Middle')
+    state.addSnapshot('c1', { key: makeEntry('key', 'c1', 'same') }, 1, 'Older')
+    state.addSnapshot('c1', { key: makeEntry('key', 'c1', 'same') }, 2, 'Middle')
     state.addSnapshot(
       'c1',
       { key: makeEntry('key', 'c1', 'changed') },
+      3,
       'Latest',
     )
 

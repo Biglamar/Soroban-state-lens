@@ -7,6 +7,7 @@ import type { LedgerEntry as StoreLedgerEntry } from '../../store/types'
 interface MapLedgerEntriesParams {
   contractId: string
   entries: Array<RpcLedgerEntry>
+  latestLedger?: number
   decodedValuesByKey?: Record<string, unknown>
   decodeErrorReasonsByKey?: Record<string, string>
 }
@@ -61,6 +62,7 @@ export function mapLedgerEntriesToStoreEntries(
 ): Array<StoreLedgerEntry> {
   const {
     entries,
+    latestLedger,
     decodedValuesByKey = {},
     decodeErrorReasonsByKey = {},
   } = params
@@ -96,7 +98,6 @@ export function mapLedgerEntriesToStoreEntries(
         decodedValuesByKey[entry.key] !== undefined
           ? decodedValuesByKey[entry.key]
           : entry.xdr,
-      ...(durability ? { durability } : {}),
       lastModifiedLedger,
       expirationLedger,
       ...(durability === 'Temporary' &&

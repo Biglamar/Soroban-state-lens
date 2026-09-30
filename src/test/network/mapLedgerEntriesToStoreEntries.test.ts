@@ -30,6 +30,23 @@ describe('mapLedgerEntriesToStoreEntries', () => {
     },
   )
 
+  it('marks temporary entries expired only after their live-until ledger', () => {
+    const key = makeContractDataKey('temporary')
+    const [expired] = mapLedgerEntriesToStoreEntries({
+      contractId: 'CONTRACT_META',
+      latestLedger: 101,
+      entries: [{ key, xdr: 'value-xdr', liveUntilLedgerSeq: 100 }],
+    })
+    const [stillLive] = mapLedgerEntriesToStoreEntries({
+      contractId: 'CONTRACT_META',
+      latestLedger: 100,
+      entries: [{ key, xdr: 'value-xdr', liveUntilLedgerSeq: 100 }],
+    })
+
+    expect(expired.expired).toBe(true)
+    expect(stillLive.expired).toBeUndefined()
+  })
+
   it('maps representative entries into stable store records', () => {
     const result = mapLedgerEntriesToStoreEntries({
       contractId: 'CONTRACT_1',

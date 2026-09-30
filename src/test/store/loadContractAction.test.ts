@@ -4,6 +4,17 @@ import { ContractLoadStatus } from '../../store/types'
 
 import type { GetLedgerEntriesResult } from '../../lib/network/getLedgerEntries'
 
+function makeTemporaryLedgerKey(): string {
+  const ledgerKey = xdr.LedgerKey.contractData(
+    new xdr.LedgerKeyContractData({
+      contract: xdr.ScAddress.scAddressTypeContract(Buffer.alloc(32)),
+      key: xdr.ScVal.scvSymbol('temporary-key'),
+      durability: xdr.ContractDataDurability.temporary(),
+    }),
+  )
+  return ledgerKey.toXDR('base64')
+}
+
 const mockGetLedgerEntries = vi.fn()
 const mockDecodeScVal = vi.fn()
 const mockTerminateDecoderWorkerSafe = vi.fn()

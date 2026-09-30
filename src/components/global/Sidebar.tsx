@@ -10,7 +10,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { downloadSnapshotDiff } from '../../lib/diff/exportSnapshotDiff'
 import { resolveDiffStatus } from '../../lib/diff/resolveDiffStatus'
 import { formatContractIdShort } from '../../lib/format/formatContractIdShort'
@@ -335,18 +335,9 @@ function HistoryPanel() {
     clearSnapshots(activeContractId)
   }
 
-  const handleDownloadDiff = () => {
-    if (snapshots.length < 2) return
-
-    const prev = snapshots[snapshots.length - 2]
-    const next = snapshots[snapshots.length - 1]
-
-    downloadSnapshotDiff(prev, next)
-  }
-
   const hasInsufficient = snapshots.length < 2
-  const latestPreviousSnapshot = snapshots[snapshots.length - 2]
-  const latestNextSnapshot = snapshots[snapshots.length - 1]
+  const latestPreviousSnapshot = snapshots.at(-2)
+  const latestNextSnapshot = snapshots.at(-1)
   const requestedPreviousSnapshot = snapshots.find(
     (snapshot) => snapshot.id === previousSnapshotId,
   )
@@ -362,6 +353,12 @@ function HistoryPanel() {
   const comparisonNextSnapshot = selectedSnapshotsMatch
     ? latestNextSnapshot
     : nextSnapshot
+
+  const handleDownloadDiff = () => {
+    if (comparisonPreviousSnapshot && comparisonNextSnapshot) {
+      downloadSnapshotDiff(comparisonPreviousSnapshot, comparisonNextSnapshot)
+    }
+  }
 
   const handleRemoveSnapshot = (snapshotId: string, label: string) => {
     if (!activeContractId) return

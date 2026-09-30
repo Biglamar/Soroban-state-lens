@@ -56,6 +56,36 @@ function sanitizeFootprintSection(value: unknown): Array<string> {
   return value.every((item) => typeof item === 'string') ? value : []
 }
 
+function sanitizeSimulationResults(
+  value: unknown,
+): NonNullable<SimulateTransactionResult['results']> {
+  if (!Array.isArray(value)) return []
+
+  return value.flatMap((item) => {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      return []
+    }
+
+    const result = item as Record<string, unknown>
+    const hasAuth = Object.hasOwn(result, 'auth')
+    const hasXdr = Object.hasOwn(result, 'xdr')
+    if (
+      (!hasAuth && !hasXdr) ||
+      (hasAuth && !Array.isArray(result.auth)) ||
+      (hasXdr && typeof result.xdr !== 'string')
+    ) {
+      return []
+    }
+
+    return [
+      {
+        ...(hasAuth ? { auth: result.auth as Array<unknown> } : {}),
+        ...(hasXdr ? { xdr: result.xdr as string } : {}),
+      },
+    ]
+  })
+}
+
 function isRpcError(value: unknown): value is RpcError {
   return (
     typeof value === 'object' &&
