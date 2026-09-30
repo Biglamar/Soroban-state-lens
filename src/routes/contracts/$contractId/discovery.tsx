@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute, redirect, useBlocker } from '@tanstack/react-router'
 import { Button, Card, Heading, IconButton } from '@stellar/design-system'
 import { normalizeFootprintKeys } from '../../../lib/network/normalizeFootprintKeys'
 import { simulateTransaction } from '../../../lib/network/simulateTransaction'
@@ -216,6 +216,11 @@ export function DiscoveryRoute() {
   const addToWatchlist = useLensStore((state) => state.addToWatchlist)
   const rpcUrl = useLensStore((state) => state.networkConfig.rpcUrl)
   const [functionName, setFunctionName] = useState('')
+  const [submittedDraft, setSubmittedDraft] = useState<{
+    functionName: string
+    transaction: string
+    arguments: string
+  } | null>(null)
   const [inputState, setInputState] = useState<DiscoveryInputState>({
     transaction: '',
     arguments: '',
@@ -230,21 +235,19 @@ export function DiscoveryRoute() {
   )
   const isSubmitting = state.status === 'loading'
 
-  const hasUnsavedInput = hasUnsavedDiscoveryInput(inputState, functionName)
+  const matchesSubmittedDraft =
+    submittedDraft?.functionName === functionName &&
+    submittedDraft.transaction === inputState.transaction &&
+    submittedDraft.arguments === inputState.arguments
+  const hasUnsavedInput =
+    hasUnsavedDiscoveryInput(inputState, functionName) && !matchesSubmittedDraft
 
-  useEffect(() => {
-    if (!hasUnsavedInput) return
-
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault()
-      event.returnValue = ''
-    }
-
-    window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-    }
-  }, [hasUnsavedInput])
+  useBlocker({
+    shouldBlockFn: () =>
+      hasUnsavedInput &&
+      !window.confirm('You have unsaved discovery input. Leave this page?'),
+    enableBeforeUnload: () => hasUnsavedInput,
+  })
 
   useEffect(
     () => () => {
@@ -321,8 +324,11 @@ export function DiscoveryRoute() {
           requestedKeyCount: keys.length,
         }),
       )
-      setInputState({ transaction: '', arguments: '' })
-      setFunctionName('')
+      setSubmittedDraft({
+        functionName,
+        transaction: inputState.transaction,
+        arguments: inputState.arguments,
+      })
     } finally {
       if (!controller.signal.aborted) {
         activeRequest.current = null

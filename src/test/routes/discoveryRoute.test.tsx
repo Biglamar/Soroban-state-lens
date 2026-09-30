@@ -21,7 +21,7 @@ interface JsonRpcRequest {
   method: string
 }
 
-function getRpcPequests(method: string) {
+function getRpcRequests(method: string) {
   return vi.mocked(fetch).mock.calls.filter(([, init]) => {
     const request = JSON.parse(String(init?.body)) as JsonRpcRequest
     return request.method === method
@@ -53,7 +53,7 @@ function renderDiscoveryRoute() {
     defaultPreload: 'intent',
     defaultPreloadStaleTime: 0,
   })
-  return render(<RouterProvider router={router} />)
+  return { router, ...render(<RouterProvider router={router} />) }
 }
 
 async function fillValidForm() {
@@ -206,7 +206,7 @@ describe('Discovery route', () => {
       screen.getByRole('button', { name: 'Simulate transaction' }),
     )
     await waitFor(() =>
-      expect(getRpcPequests('simulateTransaction')).toHaveLength(1),
+      expect(getRpcRequests('simulateTransaction')).toHaveLength(1),
     )
     const [, init] = getRpcRequests('simulateTransaction')[0]
     const signal = init?.signal as AbortSignal
@@ -253,6 +253,39 @@ describe('Discovery route', () => {
     expect(event.defaultPrevented).toBe(true)
   })
 
+  it('blocks in-app navigation when the draft is dirty', async () => {
+    const { router } = renderDiscoveryRoute()
+    fireEvent.change(await screen.findByLabelText('Transaction XDR'), {
+      target: { value: 'base64-transaction-xdr' },
+    })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    void router.navigate({ to: '/settings/preferences' })
+
+    await waitFor(() =>
+      expect(confirm).toHaveBeenCalledWith(
+        'You have unsaved discovery input. Leave this page?',
+      ),
+    )
+    expect(window.location.pathname).toBe(
+      `/contracts/${VALID_CONTRACT_ID}/discovery`,
+    )
+  })
+
+  it('allows in-app navigation after confirming the dirty draft warning', async () => {
+    const { router } = renderDiscoveryRoute()
+    fireEvent.change(await screen.findByLabelText('Transaction XDR'), {
+      target: { value: 'base64-transaction-xdr' },
+    })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    void router.navigate({ to: '/settings/preferences' })
+
+    await waitFor(() =>
+      expect(window.location.pathname).toBe('/settings/preferences'),
+    )
+  })
+
   it('warns when leaving with a dirty discovery argument draft', async () => {
     renderDiscoveryRoute()
     fireEvent.change(await screen.findByLabelText('Arguments (JSON reference)'), {
@@ -284,5 +317,13 @@ describe('Discovery route', () => {
 
     expect(result).toBe(true)
     expect(event.defaultPrevented).toBe(false)
+    expect(screen.getByLabelText('Function name')).toHaveProperty(
+      'value',
+      'read_state',
+    )
+    expect(screen.getByLabelText('Transaction XDR')).toHaveProperty(
+      'value',
+      'base64-transaction-xdr',
+    )
   })
 })
