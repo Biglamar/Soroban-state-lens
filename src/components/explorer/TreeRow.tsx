@@ -53,14 +53,22 @@ function formatPreview(
       return `${row.node.errorType}:${row.node.code}`
     case 'map':
       return formatCollectionPreview(
-        row.node.entries.length,
+        row.node.entries.length -
+          (row.node.omittedChildren !== undefined &&
+          row.node.entries.at(-1)?.key.kind === 'truncated'
+            ? 1
+            : 0),
         'entries',
         row.node.childLimit,
         row.node.omittedChildren,
       )
     case 'vec':
       return formatCollectionPreview(
-        row.node.items.length,
+        row.node.items.length -
+          (row.node.omittedChildren !== undefined &&
+          row.node.items.at(-1)?.kind === 'truncated'
+            ? 1
+            : 0),
         'items',
         row.node.childLimit,
         row.node.omittedChildren,

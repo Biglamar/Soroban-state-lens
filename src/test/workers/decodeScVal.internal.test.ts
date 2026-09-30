@@ -193,9 +193,10 @@ describe('decoderWorkerApi.decodeScVal', () => {
       throw new Error('Expected a decoded vector')
     }
 
-    expect(result.items).toHaveLength(MAX_CHILDREN_DEFAULT)
+    expect(result.items).toHaveLength(MAX_CHILDREN_DEFAULT + 1)
     expect(result.childLimit).toBe(MAX_CHILDREN_DEFAULT)
     expect(result.omittedChildren).toBe(1)
+    expect(result.items.at(-1)?.kind).toBe('truncated')
   })
 
   it('limits oversized maps and reports omitted entries', async () => {
@@ -217,8 +218,9 @@ describe('decoderWorkerApi.decodeScVal', () => {
       throw new Error('Expected a decoded map')
     }
 
-    expect(result.entries).toHaveLength(MAX_CHILDREN_DEFAULT)
+    expect(result.entries).toHaveLength(MAX_CHILDREN_DEFAULT + 1)
     expect(result.childLimit).toBe(MAX_CHILDREN_DEFAULT)
     expect(result.omittedChildren).toBe(1)
+    expect(result.entries.at(-1)?.key.kind).toBe('truncated')
   })
 })

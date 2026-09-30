@@ -660,17 +660,13 @@ export function normalizeNode(
         } satisfies VecNode
       }
 
-      const maxChildren = normalizeMaxChildren(options?.maxChildren)
-      const childCount =
-        maxChildren === undefined
-          ? normalizedScVal.value.length
-          : Math.min(normalizedScVal.value.length, maxChildren)
+      const maxChildren =
+        normalizeMaxChildren(options?.maxChildren) ?? MAX_CHILDREN_DEFAULT
+      const childCount = Math.min(normalizedScVal.value.length, maxChildren)
       const isTruncated = childCount < normalizedScVal.value.length
 
-      // Pre-allocate the bounded result array.
-      const items: Array<Node> = new Array(
-        childCount + (isTruncated ? 1 : 0),
-      )
+      // The configured limit bounds decoded values; a marker reports omitted values.
+      const items: Array<Node> = new Array(childCount + (isTruncated ? 1 : 0))
 
       // Use a bounded loop with per-item error handling.
       for (let i = 0; i < childCount; i++) {
@@ -704,11 +700,10 @@ export function normalizeNode(
         kind: 'vec',
         path,
         items,
-        ...(normalizedScVal.value.length > MAX_CHILDREN_DEFAULT
+        ...(isTruncated
           ? {
-              childLimit: MAX_CHILDREN_DEFAULT,
-              omittedChildren:
-                normalizedScVal.value.length - MAX_CHILDREN_DEFAULT,
+              childLimit: maxChildren,
+              omittedChildren: normalizedScVal.value.length - childCount,
             }
           : {}),
         raw: toRaw(scVal),
@@ -717,13 +712,14 @@ export function normalizeNode(
 
     case ScValType.SCV_MAP: {
       const entries: Array<{ key: Node; value: Node }> = []
+      const maxChildren =
+        normalizeMaxChildren(options?.maxChildren) ?? MAX_CHILDREN_DEFAULT
+      const sourceLength = Array.isArray(normalizedScVal.value)
+        ? normalizedScVal.value.length
+        : 0
+      const childCount = Math.min(sourceLength, maxChildren)
+      const isTruncated = childCount < sourceLength
       if (Array.isArray(normalizedScVal.value)) {
-        const maxChildren = normalizeMaxChildren(options?.maxChildren)
-        const childCount =
-          maxChildren === undefined
-            ? normalizedScVal.value.length
-            : Math.min(normalizedScVal.value.length, maxChildren)
-
         for (let index = 0; index < childCount; index += 1) {
           const entry = normalizedScVal.value[index]
           // js-xdr exposes struct fields via accessor methods (e.g.
@@ -752,7 +748,7 @@ export function normalizeNode(
           entries.push({ key: keyNode, value: valueNode })
         }
 
-        if (childCount < normalizedScVal.value.length) {
+        if (isTruncated) {
           const truncation = createTruncatedNode(path, currentDepth + 1)
           entries.push({ key: truncation, value: truncation })
         }
@@ -761,12 +757,10 @@ export function normalizeNode(
         kind: 'map',
         path,
         entries,
-        ...(Array.isArray(normalizedScVal.value) &&
-        normalizedScVal.value.length > MAX_CHILDREN_DEFAULT
+        ...(isTruncated
           ? {
-              childLimit: MAX_CHILDREN_DEFAULT,
-              omittedChildren:
-                normalizedScVal.value.length - MAX_CHILDREN_DEFAULT,
+              childLimit: maxChildren,
+              omittedChildren: sourceLength - childCount,
             }
           : {}),
         raw: toRaw(scVal),
