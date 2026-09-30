@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute, redirect, useBlocker } from '@tanstack/react-router'
 import { Button, Card, Heading, IconButton } from '@stellar/design-system'
 import { normalizeFootprintKeys } from '../../../lib/network/normalizeFootprintKeys'
 import { simulateTransaction } from '../../../lib/network/simulateTransaction'
@@ -25,6 +25,18 @@ export interface DiscoveryInputState {
   transaction: string
   arguments: string
 }
+
+export function hasUnsavedDiscoveryInput(
+  inputState: DiscoveryInputState,
+  functionName: string,
+): boolean {
+  return (
+    functionName.trim() !== '' ||
+    inputState.transaction.trim() !== '' ||
+    inputState.arguments.trim() !== ''
+  )
+}
+
 export function dedupeDiscoveryKeys(
   keys: Array<DiscoveredKey> | undefined,
 ): Array<DiscoveredKey> {
@@ -126,7 +138,7 @@ export function DiscoveryStateView({
             Discovery failed
           </Heading>
           <p className="text-text-muted text-sm">
-            {state.error || 'An unknown error occurred while discovering keys.'}
+            {state.error ?? 'An unknown error occurred while discovering keys.'}
           </p>
           {onRetry && (
             <div>
@@ -204,6 +216,11 @@ export function DiscoveryRoute() {
   const addToWatchlist = useLensStore((state) => state.addToWatchlist)
   const rpcUrl = useLensStore((state) => state.networkConfig.rpcUrl)
   const [functionName, setFunctionName] = useState('')
+  const [submittedDraft, setSubmittedDraft] = useState<{
+    functionName: string
+    transaction: string
+    arguments: string
+  } | null>(null)
   const [inputState, setInputState] = useState<DiscoveryInputState>({
     transaction: '',
     arguments: '',
@@ -217,6 +234,20 @@ export function DiscoveryRoute() {
     buildDiscoveryLoadState({ status: 'empty', requestedKeyCount: 0 }),
   )
   const isSubmitting = state.status === 'loading'
+
+  const matchesSubmittedDraft =
+    submittedDraft?.functionName === functionName &&
+    submittedDraft.transaction === inputState.transaction &&
+    submittedDraft.arguments === inputState.arguments
+  const hasUnsavedInput =
+    hasUnsavedDiscoveryInput(inputState, functionName) && !matchesSubmittedDraft
+
+  useBlocker({
+    shouldBlockFn: () =>
+      hasUnsavedInput &&
+      !window.confirm('You have unsaved discovery input. Leave this page?'),
+    enableBeforeUnload: () => hasUnsavedInput,
+  })
 
   useEffect(
     () => () => {
@@ -293,6 +324,11 @@ export function DiscoveryRoute() {
           requestedKeyCount: keys.length,
         }),
       )
+      setSubmittedDraft({
+        functionName,
+        transaction: inputState.transaction,
+        arguments: inputState.arguments,
+      })
     } finally {
       if (!controller.signal.aborted) {
         activeRequest.current = null

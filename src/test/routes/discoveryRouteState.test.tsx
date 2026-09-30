@@ -34,6 +34,15 @@ vi.mock('@stellar/design-system', () => ({
   ),
 }))
 
+const hasUnsavedDiscoveryEdits = ({
+  transactionDraft,
+  argumentDraft,
+}: {
+  transactionDraft?: string
+  argumentDraft?: string
+}) =>
+  Boolean(transactionDraft?.trim().length || argumentDraft?.trim().length)
+
 describe('discovery route state', () => {
   it('renders loading, empty, error, and success states from route data', () => {
     const retry = vi.fn()
@@ -93,5 +102,35 @@ describe('discovery route state', () => {
   it('deduplicates explorer keys while preserving first-seen order', () => {
     expect(dedupeExplorerKeys('a, b, a, c, , b')).toBe('a,b,c')
     expect(dedupeExplorerKeys('  zzz ,  aaa , zzz , aaa  ')).toBe('zzz,aaa')
+  })
+
+  it('warns only when discovery transaction or argument draft contains edits', () => {
+    expect(
+      hasUnsavedDiscoveryEdits({ transactionDraft: '', argumentDraft: '' }),
+    ).toBe(false)
+    expect(
+      hasUnsavedDiscoveryEdits({
+        transactionDraft: '   ',
+        argumentDraft: '\n\t',
+      }),
+    ).toBe(false)
+    expect(
+      hasUnsavedDiscoveryEdits({
+        transactionDraft: 'invoke transfer',
+        argumentDraft: '',
+      }),
+    ).toBe(true)
+    expect(
+      hasUnsavedDiscoveryEdits({
+        transactionDraft: '',
+        argumentDraft: '{"amount": 10}',
+      }),
+    ).toBe(true)
+    expect(
+      hasUnsavedDiscoveryEdits({
+        transactionDraft: 'invoke transfer',
+        argumentDraft: '{"amount": 10}',
+      }),
+    ).toBe(true)
   })
 })
