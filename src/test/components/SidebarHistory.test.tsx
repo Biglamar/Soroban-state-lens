@@ -165,4 +165,38 @@ describe('Sidebar History Panel', () => {
     expect(screen.getByText('1')).toBeTruthy()
     expect(screen.getByText('Unchanged')).toBeTruthy()
   })
+
+  it('updates the diff summary when an older snapshot pair is selected', () => {
+    const state = useLensStore.getState()
+    state.setActiveContractId('c1')
+    state.addSnapshot('c1', { key: makeEntry('key', 'c1', 'same') }, 1, 'Older')
+    state.addSnapshot('c1', { key: makeEntry('key', 'c1', 'same') }, 2, 'Middle')
+    state.addSnapshot(
+      'c1',
+      { key: makeEntry('key', 'c1', 'changed') },
+      3,
+      'Latest',
+    )
+
+    render(<Sidebar open={true} onClose={vi.fn()} activeNavItem="history" />)
+
+    expect(screen.getByText('~1')).toBeTruthy()
+    fireEvent.change(
+      screen.getByRole('combobox', { name: 'Compare from snapshot' }),
+      {
+        target: { value: useLensStore.getState().getSnapshots('c1')[0]?.id },
+      },
+    )
+    fireEvent.change(
+      screen.getByRole('combobox', { name: 'Compare to snapshot' }),
+      {
+        target: { value: useLensStore.getState().getSnapshots('c1')[1]?.id },
+      },
+    )
+
+    expect(screen.getAllByText('Older').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Middle').length).toBeGreaterThan(0)
+    expect(screen.getByText('~0')).toBeTruthy()
+    expect(screen.getByText('1')).toBeTruthy()
+  })
 })

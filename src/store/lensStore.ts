@@ -623,6 +623,7 @@ const createContractLoadSlice = (
         const mappedEntries = mapLedgerEntriesToStoreEntries({
           contractId,
           entries,
+          latestLedger,
           decodedValuesByKey,
           decodeErrorReasonsByKey,
         })

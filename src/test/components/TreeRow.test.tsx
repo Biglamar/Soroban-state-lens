@@ -54,6 +54,20 @@ describe('TreeRow', () => {
     expect(screen.getByText('string')).toBeTruthy()
   })
 
+  it('marks expired rows while preserving the value preview', () => {
+    render(
+      <TreeRow
+        row={makeRow({ expired: true })}
+        rowHeight={40}
+        isExpanded={false}
+        isSelected={false}
+      />,
+    )
+
+    expect(screen.getByText('Expired')).toBeTruthy()
+    expect(screen.getByText('hello')).toBeTruthy()
+  })
+
   it('renders expander only for parent rows', () => {
     const row = makeRow({
       hasChildren: true,
