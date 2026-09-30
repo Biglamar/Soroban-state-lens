@@ -70,15 +70,15 @@ describe('network settings', () => {
     fireEvent.click(screen.getByRole('option', { name: 'Custom' }))
 
     const passphraseInput = screen.getByRole('textbox', {
-      name: 'Custom network passphrase',
+      name: 'Custom Network Passphrase input',
     })
     const applyButton = screen.getByRole('button', { name: 'Apply' })
 
-    expect(screen.getByText('Network passphrase is required')).toBeTruthy()
-    expect((applyButton as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText('Network passphrase is required.')).toBeTruthy()
+    expect(applyButton).toHaveProperty('disabled', true)
 
     fireEvent.change(passphraseInput, { target: { value: '  ' } })
-    expect((applyButton as HTMLButtonElement).disabled).toBe(true)
+    expect(applyButton).toHaveProperty('disabled', true)
 
     fireEvent.change(passphraseInput, {
       target: { value: 'New custom passphrase' },
@@ -89,7 +89,7 @@ describe('network settings', () => {
         target: { value: '  https://rpc.custom.example.com/  ' },
       },
     )
-    expect((applyButton as HTMLButtonElement).disabled).toBe(false)
+    expect(applyButton).toHaveProperty('disabled', false)
     fireEvent.click(applyButton)
 
     expect(useLensStore.getState().networkConfig).toMatchObject({

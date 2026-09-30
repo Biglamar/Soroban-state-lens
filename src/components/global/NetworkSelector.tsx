@@ -79,7 +79,11 @@ export default function NetworkSelector() {
       } else {
         setCustomRpcUrl(networkConfig.rpcUrl || '')
       }
-      setCustomNetworkPassphrase(networkConfig.networkPassphrase || '')
+      setCustomNetworkPassphrase(
+        networkConfig.networkPassphrase === 'Custom Network'
+          ? ''
+          : networkConfig.networkPassphrase || '',
+      )
       setShowCustomInput(true)
     }
   }, [
@@ -201,7 +205,6 @@ export default function NetworkSelector() {
 
   const handleApplyCustomUrl = () => {
     if (!customNetworkPassphrase.trim()) {
-      setValidationError('')
       return
     }
 
@@ -500,34 +503,21 @@ export default function NetworkSelector() {
                   placeholder="Test SDF Network ; September 2015"
                   className="w-full px-3 py-2 bg-background-dark border border-border-dark focus:border-primary rounded-md text-sm text-white placeholder-text-muted transition-colors focus:outline-none focus:ring-1 focus:ring-primary/20"
                   aria-label="Custom Network Passphrase input"
+                  aria-invalid={!customNetworkPassphrase.trim()}
+                  aria-describedby={
+                    !customNetworkPassphrase.trim()
+                      ? 'network-passphrase-error'
+                      : undefined
+                  }
                 />
               </div>
-
-              <input
-                type="text"
-                value={customNetworkPassphrase}
-                onChange={(e) => setCustomNetworkPassphrase(e.target.value)}
-                placeholder="Network passphrase"
-                className={`w-full px-3 py-2 bg-background-dark border rounded-md text-sm text-white placeholder-text-muted transition-colors ${
-                  customNetworkPassphrase.trim()
-                    ? 'border-border-dark focus:border-primary'
-                    : 'border-red-500 focus:border-red-500'
-                } focus:outline-none focus:ring-1 focus:ring-primary/20`}
-                aria-label="Custom network passphrase"
-                aria-invalid={!customNetworkPassphrase.trim()}
-                aria-describedby={
-                  !customNetworkPassphrase.trim()
-                    ? 'network-passphrase-error'
-                    : undefined
-                }
-              />
 
               {!customNetworkPassphrase.trim() && (
                 <p
                   id="network-passphrase-error"
                   className="text-xs text-red-400"
                 >
-                  Network passphrase is required
+                  Network passphrase is required.
                 </p>
               )}
 
